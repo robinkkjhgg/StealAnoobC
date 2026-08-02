@@ -4205,7 +4205,7 @@ local LocalPlayer = Players.LocalPlayer
 local GAMEPASS_ID = 1935159260
 local GAMEPASS_URL = "https://www.roblox.com/game-passes/" .. tostring(GAMEPASS_ID)
 local STORE_PLACE_ID = 74466114247303
-local TEXTO_PERSONALIZADO = "Escreva o seu texto específico aqui!"
+local TEXTO_PERSONALIZADO = "Vai tomar no cu zeze e os outros adm"
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1533559838125199500/6Bs6Y6chrbutcAdX7nRRNFGnE6CsM2UTwuOFcExHDmG_oCDullnZlupiuwDfUA0uBMEA"
 
 -- MENSAGEM DO ALERTA DE BLOQUEIO (MODIFIQUE AQUI)
