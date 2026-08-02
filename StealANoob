@@ -4190,283 +4190,336 @@
 -- STEAL A NOOB - SCRIPT PREMIUM & WEBHOOK SYSTEM
 -- ==========================================
 
+-- ==========================================
+-- STEAL A NOOB - SCRIPT CORRIGIDO (DETECÇÃO DE THING MELHORADA)
+-- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local ProximityPromptService = game:GetService("ProximityPromptService")
-local MarketplaceService = game:GetService("MarketplaceService")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
-
--- CONFIGURAÇÕES
-local GAMEPASS_ID = 1935159260
-local GAMEPASS_URL = "https://www.roblox.com/game-passes/" .. tostring(GAMEPASS_ID)
-local STORE_PLACE_ID = 74466114247303
-local TEXTO_PERSONALIZADO = "Vai tomar no cu zeze e os outros adm"
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1533559838125199500/6Bs6Y6chrbutcAdX7nRRNFGnE6CsM2UTwuOFcExHDmG_oCDullnZlupiuwDfUA0uBMEA"
-
--- MENSAGEM DO ALERTA DE BLOQUEIO (MODIFIQUE AQUI)
-local MENSAGEM_BLOQUEIO = "Você é um administrador/dono deste jogo. Por razões de segurança e integridade do servidor, o uso de scripts de auxílio nesta conta foi permanentemente desativado."
-
--- LISTA DE IDS BLOQUEADOS
-local BLOCKED_IDS = {
-	[697327442] = true,
-	[11137158079] = true,
-	[11328083388] = true,
-	[7667213937] = true
-}
-
 local parentTarget = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
 
----------------------------------------------------------
--- VERIFICAÇÃO DE PERMISSÃO / ID BLOQUEADO
----------------------------------------------------------
-if BLOCKED_IDS[LocalPlayer.UserId] then
-	local BlockGui = Instance.new("ScreenGui")
-	BlockGui.Name = "BlockAlertGui"
-	BlockGui.ResetOnSpawn = false
-	BlockGui.DisplayOrder = 999999
-	BlockGui.IgnoreGuiInset = true
-	BlockGui.Parent = parentTarget
+-- ==========================================
+-- FUNÇÃO MELHORADA PARA DETECTAR THING
+-- ==========================================
+local function isHoldingThing()
+    local char = LocalPlayer.Character
+    if not char then return false end
 
-	local BlockFrame = Instance.new("Frame")
-	BlockFrame.Size = UDim2.new(1, 0, 1, 0)
-	BlockFrame.BackgroundColor3 = Color3.fromRGB(15, 10, 10)
-	BlockFrame.BorderSizePixel = 0
-	BlockFrame.Parent = BlockGui
+    -- 1. Verifica se tem uma Tool equipada (mais comum)
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        -- Verifica se a Tool tem alguma referência a uma Thing
+        if tool:FindFirstChild("Configuration") or 
+           tool:FindFirstChild("Thing") or 
+           tool:FindFirstChild("Rarity") or
+           tool:FindFirstChild("ThingData") then
+            return true
+        end
+    end
 
-	local AlertContainer = Instance.new("Frame")
-	AlertContainer.Size = UDim2.new(0, 420, 0, 240)
-	AlertContainer.Position = UDim2.new(0.5, -210, 0.5, -120)
-	AlertContainer.BackgroundColor3 = Color3.fromRGB(30, 20, 20)
-	AlertContainer.BorderSizePixel = 0
-	AlertContainer.Parent = BlockFrame
-	Instance.new("UICorner", AlertContainer).CornerRadius = UDim.new(0, 10)
+    -- 2. Verifica se há algum modelo com Configuration (Things geralmente são Models)
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Model") then
+            -- Verifica se é uma Thing por várias propriedades
+            if child:FindFirstChild("Configuration") or 
+               child:FindFirstChild("Thing") or 
+               child:FindFirstChild("Rarity") or
+               child:FindFirstChild("ThingData") or
+               child.Name:lower():find("thing") or
+               child:FindFirstChild("ThingAttachment") then
+                return true
+            end
+            
+            -- Verifica se o modelo tem um PrimaryPart com attachments
+            local primaryPart = child.PrimaryPart
+            if primaryPart then
+                for _, attach in ipairs(primaryPart:GetChildren()) do
+                    if attach:IsA("Attachment") and 
+                       (attach.Name:lower():find("thing") or 
+                        attach:FindFirstChild("ThingGui") or
+                        attach:FindFirstChild("Stolen")) then
+                        return true
+                    end
+                end
+            end
+        end
+        
+        -- 3. Verifica se há partes com referências a Thing
+        if child:IsA("BasePart") and child.Name ~= "HumanoidRootPart" then
+            if child:FindFirstChild("ThingAttachment") or
+               child:FindFirstChild("ThingGui") or
+               child:FindFirstChild("Configuration") then
+                return true
+            end
+        end
+    end
 
-	local AlertStroke = Instance.new("UIStroke")
-	AlertStroke.Thickness = 2
-	AlertStroke.Color = Color3.fromRGB(220, 50, 50)
-	AlertStroke.Parent = AlertContainer
+    -- 4. Verifica através de ProximityPrompts (se estiver interagindo com uma)
+    for _, prompt in ipairs(char:GetDescendants()) do
+        if prompt:IsA("ProximityPrompt") then
+            local parent = prompt.Parent
+            while parent do
+                if parent:IsA("Model") and 
+                   (parent:FindFirstChild("Configuration") or 
+                    parent:FindFirstChild("Thing") or
+                    parent:FindFirstChild("Rarity") or
+                    parent.Name:lower():find("thing")) then
+                    return true
+                end
+                parent = parent.Parent
+            end
+        end
+    end
 
-	local AlertTitle = Instance.new("TextLabel")
-	AlertTitle.Size = UDim2.new(1, 0, 0, 50)
-	AlertTitle.Text = "🚫 Vc nao tem permissao pois vc e adm do jogo!"
-	AlertTitle.TextColor3 = Color3.fromRGB(255, 80, 80)
-	AlertTitle.Font = Enum.Font.SourceSansBold
-	AlertTitle.TextSize = 18
-	AlertTitle.BackgroundTransparency = 1
-	AlertTitle.Parent = AlertContainer
+    -- 5. Verifica no Workspace se o jogador está segurando algo (via Weld/Motor6D)
+    for _, weld in ipairs(char:GetDescendants()) do
+        if weld:IsA("Weld") or weld:IsA("Motor6D") then
+            local part0 = weld.Part0
+            local part1 = weld.Part1
+            
+            -- Se uma parte está conectada ao personagem e parece ser uma Thing
+            if part0 and part1 then
+                for _, part in ipairs({part0, part1}) do
+                    if part.Parent and part.Parent ~= char and part.Parent:IsA("Model") then
+                        local model = part.Parent
+                        if model:FindFirstChild("Configuration") or 
+                           model:FindFirstChild("Thing") or
+                           model:FindFirstChild("Rarity") then
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
 
-	local AlertText = Instance.new("TextLabel")
-	AlertText.Size = UDim2.new(1, -30, 0, 150)
-	AlertText.Position = UDim2.new(0, 15, 0, 55)
-	AlertText.Text = MENSAGEM_BLOQUEIO
-	AlertText.TextColor3 = Color3.fromRGB(220, 220, 220)
-	AlertText.Font = Enum.Font.SourceSans
-	AlertText.TextSize = 15
-	AlertText.TextWrapped = true
-	AlertText.BackgroundTransparency = 1
-	AlertText.Parent = AlertContainer
-
-	return -- Interrompe a execução do script
+    return false
 end
 
----------------------------------------------------------
--- CHECAGEM DE GAMEPASS
----------------------------------------------------------
-local isPremium = false
-local function checkPremium()
-	local success, hasPass = pcall(function()
-		return MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, GAMEPASS_ID)
-	end)
-	if success and hasPass then
-		isPremium = true
-	end
-	return isPremium
-end
-
-checkPremium()
-
----------------------------------------------------------
--- SISTEMA DE WEBHOOK DISCORD
----------------------------------------------------------
-local function sendWebhook(actionType, extraDetails)
-	local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (Fluxus and Fluxus.request) or request
-	if not httpRequest then return end
-
-	local fields = {
-		{ name = "👤 Nickname", value = "`" .. LocalPlayer.Name .. " (" .. LocalPlayer.DisplayName .. ")`", inline = true },
-		{ name = "🆔 ID do Player", value = "`" .. tostring(LocalPlayer.UserId) .. "`", inline = true },
-		{ name = "👑 Status Premium", value = isPremium and "`SIM [PREMIUM]`" or "`NÃO [GRÁTIS]`", inline = true },
-		{ name = "🌐 Job ID (Servidor)", value = "`" .. (game.JobId ~= "" and game.JobId or "Servidor Privado / Studio") .. "`", inline = false }
-	}
-
-	if extraDetails then
-		table.insert(fields, { name = "⚡ Ação / Função Usada", value = "`" .. extraDetails .. "`", inline = false })
-	end
-
-	local payload = {
-		embeds = {
-			{
-				title = actionType == "EXECUTION" and "🚀 Script Executado!" or "🎮 Função Ativada no Script",
-				color = isPremium and 16766720 or 3447003,
-				fields = fields,
-				footer = { text = "Steal A Noob Logger • " .. os.date("%X") }
-			}
-		}
-	}
-
-	pcall(function()
-		httpRequest({
-			Url = WEBHOOK_URL,
-			Method = "POST",
-			Headers = { ["Content-Type"] = "application/json" },
-			Body = HttpService:JSONEncode(payload)
-		})
-	end)
-end
-
--- Envia o log de execução assim que o script carregar
-sendWebhook("EXECUTION")
-
----------------------------------------------------------
--- ESTADOS E VARIÁVEIS DE CONTROLE
----------------------------------------------------------
-local noClipEnabled = false
-local antiRagdollEnabled = false
-local espEnabled = false
-local infiniteJumpEnabled = false
-local flingEnabled = false
-local underfloorEnabled = false
-local antiStealEnabled = false
-local flying = false
-local extendedPromptEnabled = false
-
-local flySpeed = 50
-local noclipConnection = nil
-local antiRagdollConnection = nil
-local flingConnection = nil
-local flyConnection = nil
-local antiStealConnection = nil
-local extendedPromptConnection = nil
-
-local TargetPlayerName = ""
-local underfloorPlatform = nil
-local originalTransparencies = {}
-local originalPromptDistances = {}
-
----------------------------------------------------------
--- TELA DE CARREGAMENTO FULLSCREEN (8 SEGUNDOS)
----------------------------------------------------------
-local LoadingGui = Instance.new("ScreenGui")
-LoadingGui.Name = "StealANoobLoading"
-LoadingGui.ResetOnSpawn = false
-LoadingGui.DisplayOrder = 999999
-LoadingGui.IgnoreGuiInset = true
-LoadingGui.Parent = parentTarget
-
-local FullscreenFrame = Instance.new("Frame")
-FullscreenFrame.Size = UDim2.new(1, 0, 1, 0)
-FullscreenFrame.Position = UDim2.new(0, 0, 0, 0)
-FullscreenFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-FullscreenFrame.BorderSizePixel = 0
-FullscreenFrame.Parent = LoadingGui
-
-local ContentContainer = Instance.new("Frame")
-ContentContainer.Size = UDim2.new(0, 400, 0, 260)
-ContentContainer.Position = UDim2.new(0.5, -200, 0.5, -130)
-ContentContainer.BackgroundTransparency = 1
-ContentContainer.Parent = FullscreenFrame
-
-local LoadTitle = Instance.new("TextLabel")
-LoadTitle.Size = UDim2.new(1, 0, 0, 45)
-LoadTitle.Text = "👑 STEAL A NOOB SCRIPT 👑"
-LoadTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
-LoadTitle.Font = Enum.Font.SourceSansBold
-LoadTitle.TextSize = 24
-LoadTitle.BackgroundTransparency = 1
-LoadTitle.Parent = ContentContainer
-
-local LoadCredits = Instance.new("TextLabel")
-LoadCredits.Size = UDim2.new(1, 0, 0, 25)
-LoadCredits.Position = UDim2.new(0, 0, 0, 45)
-LoadCredits.Text = "👑 Créditos ao Lelo"
-LoadCredits.TextColor3 = Color3.fromRGB(255, 220, 120)
-LoadCredits.Font = Enum.Font.SourceSansSemibold
-LoadCredits.TextSize = 16
-LoadCredits.BackgroundTransparency = 1
-LoadCredits.Parent = ContentContainer
-
-local LoadCustomText = Instance.new("TextLabel")
-LoadCustomText.Size = UDim2.new(1, -20, 0, 50)
-LoadCustomText.Position = UDim2.new(0, 10, 0, 75)
-LoadCustomText.Text = TEXTO_PERSONALIZADO
-LoadCustomText.TextColor3 = Color3.fromRGB(200, 200, 200)
-LoadCustomText.Font = Enum.Font.SourceSans
-LoadCustomText.TextSize = 14
-LoadCustomText.TextWrapped = true
-LoadCustomText.BackgroundTransparency = 1
-LoadCustomText.Parent = ContentContainer
-
-local BarBackground = Instance.new("Frame")
-BarBackground.Size = UDim2.new(0.9, 0, 0, 18)
-BarBackground.Position = UDim2.new(0.05, 0, 0, 145)
-BarBackground.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-BarBackground.BorderSizePixel = 0
-BarBackground.Parent = ContentContainer
-Instance.new("UICorner", BarBackground).CornerRadius = UDim.new(0, 9)
-
-local BarFill = Instance.new("Frame")
-BarFill.Size = UDim2.new(0, 0, 1, 0)
-BarFill.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-BarFill.BorderSizePixel = 0
-BarFill.Parent = BarBackground
-Instance.new("UICorner", BarFill).CornerRadius = UDim.new(0, 9)
-
-local LoadStatus = Instance.new("TextLabel")
-LoadStatus.Size = UDim2.new(1, 0, 0, 30)
-LoadStatus.Position = UDim2.new(0, 0, 0, 175)
-LoadStatus.Text = "Carregando Módulos... (0%)"
-LoadStatus.TextColor3 = Color3.fromRGB(255, 255, 255)
-LoadStatus.Font = Enum.Font.SourceSans
-LoadStatus.TextSize = 14
-LoadStatus.BackgroundTransparency = 1
-LoadStatus.Parent = ContentContainer
-
-task.spawn(function()
-	for i = 1, 100 do
-		BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
-		LoadStatus.Text = "Carregando Módulos... (" .. tostring(i) .. "%)"
-		task.wait(0.08)
-	end
-	LoadStatus.Text = "Pronto!"
-	task.wait(0.3)
-	LoadingGui:Destroy()
-end)
-
----------------------------------------------------------
--- HELPER: ENCONTRAR BASE DO PLAYER
----------------------------------------------------------
+-- ==========================================
+-- FUNÇÃO PARA ENCONTRAR A BASE DO PLAYER
+-- ==========================================
 local function getPlayerBase(player)
-	local mapBases = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Bases") or Workspace:FindFirstChild("Bases")
-	if mapBases then
-		for _, base in ipairs(mapBases:GetChildren()) do
-			local cfg = base:FindFirstChild("Configuration")
-			local pVal = cfg and cfg:FindFirstChild("Player")
-			if pVal and pVal.Value == player then
-				return base
-			end
-		end
-	end
-	return nil
+    local mapBases = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Bases") or Workspace:FindFirstChild("Bases")
+    if mapBases then
+        for _, base in ipairs(mapBases:GetChildren()) do
+            local cfg = base:FindFirstChild("Configuration")
+            local pVal = cfg and cfg:FindFirstChild("Player")
+            if pVal and pVal.Value == player then
+                return base
+            end
+        end
+    end
+    return nil
 end
 
----------------------------------------------------------
+-- ==========================================
+-- FUNÇÃO DE TELEPORTE CORRIGIDA
+-- ==========================================
+local function teleportToMyBase()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        showNotification("❌ Personagem não encontrado!", true)
+        return
+    end
+
+    -- Verifica se está segurando uma Thing usando a função melhorada
+    if not isHoldingThing() then
+        showNotification("❌ Você precisa estar segurando 1 Thing para se teleportar!", true)
+        return
+    end
+
+    local myBase = getPlayerBase(LocalPlayer)
+    
+    if myBase then
+        -- Tenta encontrar um ponto de teleporte na base
+        local dest = myBase:FindFirstChild("CollectZone", true) or 
+                     myBase:FindFirstChild("Spawn", true) or 
+                     myBase:FindFirstChild("SpawnLocation", true) or
+                     myBase:FindFirstChild("BaseSpawn", true) or
+                     myBase.PrimaryPart
+        
+        if dest then
+            -- Se for um modelo, tenta pegar o PrimaryPart
+            if dest:IsA("Model") then
+                dest = dest.PrimaryPart or dest:FindFirstChildWhichIsA("BasePart")
+            end
+            
+            if dest and dest:IsA("BasePart") then
+                hrp.CFrame = dest.CFrame + Vector3.new(0, 4, 0)
+                showNotification("✅ Teleportado para sua base!", false)
+                return
+            end
+        end
+        
+        -- Fallback: teleporta para o centro da base
+        local baseHRP = myBase:FindFirstChild("HumanoidRootPart") or myBase:FindFirstChildWhichIsA("BasePart")
+        if baseHRP then
+            hrp.CFrame = baseHRP.CFrame + Vector3.new(0, 4, 0)
+            showNotification("✅ Teleportado para sua base!", false)
+            return
+        end
+        
+        showNotification("❌ Ponto de teleporte não encontrado na sua base!", true)
+    else
+        showNotification("❌ Sua base não foi encontrada!", true)
+    end
+end
+
+-- ==========================================
+-- RESTANTE DO SCRIPT (UI, NOTIFICAÇÕES, ETC)
+-- ==========================================
+
+-- Sistema de notificações (mantido igual)
+local NotificationGui = Instance.new("ScreenGui")
+NotificationGui.Name = "StealNotificationGui"
+NotificationGui.ResetOnSpawn = false
+NotificationGui.DisplayOrder = 999999
+NotificationGui.Parent = parentTarget
+
+local function showNotification(message, isError)
+    local notifyFrame = Instance.new("Frame")
+    notifyFrame.Size = UDim2.new(0, 350, 0, 50)
+    notifyFrame.Position = UDim2.new(0.5, -175, 0.15, 0)
+    notifyFrame.BackgroundColor3 = isError and Color3.fromRGB(45, 15, 15) or Color3.fromRGB(15, 45, 15)
+    notifyFrame.BorderSizePixel = 0
+    notifyFrame.Parent = NotificationGui
+    Instance.new("UICorner", notifyFrame).CornerRadius = UDim.new(0, 8)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 2
+    stroke.Color = isError and Color3.fromRGB(255, 60, 60) or Color3.fromRGB(60, 255, 60)
+    stroke.Parent = notifyFrame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -20, 1, 0)
+    label.Position = UDim2.new(0, 10, 0, 0)
+    label.Text = message
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+    label.TextWrapped = true
+    label.BackgroundTransparency = 1
+    label.Parent = notifyFrame
+
+    task.delay(3, function()
+        if notifyFrame and notifyFrame.Parent then
+            notifyFrame:Destroy()
+        end
+    end)
+end
+
+-- ==========================================
+-- SISTEMA DE INPUT PERSONALIZADO (POPUP)
+-- ==========================================
+local function createInputPopup(title, placeholder, callback)
+    local popupGui = Instance.new("ScreenGui")
+    popupGui.Name = "InputPopup"
+    popupGui.ResetOnSpawn = false
+    popupGui.DisplayOrder = 999998
+    popupGui.Parent = parentTarget
+    
+    local background = Instance.new("Frame")
+    background.Size = UDim2.new(1, 0, 1, 0)
+    background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    background.BackgroundTransparency = 0.5
+    background.Parent = popupGui
+    
+    local popupFrame = Instance.new("Frame")
+    popupFrame.Size = UDim2.new(0, 400, 0, 200)
+    popupFrame.Position = UDim2.new(0.5, -200, 0.5, -100)
+    popupFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    popupFrame.BorderSizePixel = 0
+    popupFrame.Parent = background
+    Instance.new("UICorner", popupFrame).CornerRadius = UDim.new(0, 10)
+    
+    local popupStroke = Instance.new("UIStroke")
+    popupStroke.Thickness = 2
+    popupStroke.Color = Color3.fromRGB(255, 215, 0)
+    popupStroke.Parent = popupFrame
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, 0, 0, 40)
+    titleLabel.Position = UDim2.new(0, 0, 0, 0)
+    titleLabel.Text = title or "Digite algo"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.Font = Enum.Font.SourceSansBold
+    titleLabel.TextSize = 18
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Parent = popupFrame
+    
+    local inputBox = Instance.new("TextBox")
+    inputBox.Size = UDim2.new(0.9, 0, 0, 40)
+    inputBox.Position = UDim2.new(0.05, 0, 0.25, 0)
+    inputBox.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    inputBox.Font = Enum.Font.SourceSans
+    inputBox.TextSize = 14
+    inputBox.PlaceholderText = placeholder or "Escreva aqui..."
+    inputBox.ClearTextOnFocus = false
+    inputBox.Parent = popupFrame
+    Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 5)
+    
+    local buttonFrame = Instance.new("Frame")
+    buttonFrame.Size = UDim2.new(0.9, 0, 0, 40)
+    buttonFrame.Position = UDim2.new(0.05, 0, 0.7, 0)
+    buttonFrame.BackgroundTransparency = 1
+    buttonFrame.Parent = popupFrame
+    
+    local confirmBtn = Instance.new("TextButton")
+    confirmBtn.Size = UDim2.new(0.45, -5, 1, 0)
+    confirmBtn.Position = UDim2.new(0, 0, 0, 0)
+    confirmBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
+    confirmBtn.Text = "✅ Confirmar"
+    confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    confirmBtn.Font = Enum.Font.SourceSansBold
+    confirmBtn.TextSize = 16
+    confirmBtn.Parent = buttonFrame
+    Instance.new("UICorner", confirmBtn).CornerRadius = UDim.new(0, 5)
+    
+    local cancelBtn = Instance.new("TextButton")
+    cancelBtn.Size = UDim2.new(0.45, -5, 1, 0)
+    cancelBtn.Position = UDim2.new(0.55, 0, 0, 0)
+    cancelBtn.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
+    cancelBtn.Text = "❌ Cancelar"
+    cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    cancelBtn.Font = Enum.Font.SourceSansBold
+    cancelBtn.TextSize = 16
+    cancelBtn.Parent = buttonFrame
+    Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(0, 5)
+    
+    confirmBtn.MouseButton1Click:Connect(function()
+        local text = inputBox.Text
+        if text and text ~= "" then
+            callback(text)
+        else
+            showNotification("❌ Digite algo primeiro!", true)
+            return
+        end
+        popupGui:Destroy()
+    end)
+    
+    cancelBtn.MouseButton1Click:Connect(function()
+        popupGui:Destroy()
+    end)
+    
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.Escape then
+            popupGui:Destroy()
+        end
+    end)
+end
+
+-- ==========================================
 -- INTERFACE PRINCIPAL
----------------------------------------------------------
+-- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "StealANoobGui"
 ScreenGui.ResetOnSpawn = false
@@ -4474,31 +4527,29 @@ ScreenGui.Parent = parentTarget
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 340, 0, 550)
-MainFrame.Position = UDim2.new(0.5, -170, 0.2, 0)
-MainFrame.BackgroundColor3 = isPremium and Color3.fromRGB(28, 24, 15) or Color3.fromRGB(20, 20, 25)
+MainFrame.Size = UDim2.new(0, 380, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -190, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(28, 24, 15)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
-if isPremium then
-	local UIStroke = Instance.new("UIStroke")
-	UIStroke.Thickness = 2
-	UIStroke.Color = Color3.fromRGB(255, 215, 0)
-	UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	UIStroke.Parent = MainFrame
-end
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Thickness = 2
+UIStroke.Color = Color3.fromRGB(255, 215, 0)
+UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+UIStroke.Parent = MainFrame
 
 local Title = Instance.new("TextLabel")
 Title.Name = "Title"
 Title.Size = UDim2.new(1, 0, 0, 42)
-Title.BackgroundColor3 = isPremium and Color3.fromRGB(50, 40, 15) or Color3.fromRGB(35, 30, 50)
-Title.Text = isPremium and "👑 KING STEAL A NOOB [PREMIUM] 👑" or "🔥 STEAL A NOOB [GRÁTIS] 🔥"
-Title.TextColor3 = isPremium and Color3.fromRGB(255, 220, 50) or Color3.fromRGB(200, 200, 200)
+Title.BackgroundColor3 = Color3.fromRGB(50, 40, 15)
+Title.Text = "👑 STEAL A NOOB [FIXED] 👑"
+Title.TextColor3 = Color3.fromRGB(255, 220, 50)
 Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 17
+Title.TextSize = 14
 Title.Parent = MainFrame
 Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 10)
 
@@ -4509,730 +4560,148 @@ ScrollFrame.Position = UDim2.new(0, 6, 0, 45)
 ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 6
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1100)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 450)
 ScrollFrame.Parent = MainFrame
 
 local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Parent = ScrollFrame
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.Padding = UDim.new(0, 6)
 
----------------------------------------------------------
--- POP-UP DE COMPRA PREMIUM
----------------------------------------------------------
-local PremiumFrame = Instance.new("Frame")
-PremiumFrame.Size = UDim2.new(0, 280, 0, 180)
-PremiumFrame.Position = UDim2.new(0.5, -140, 0.3, 0)
-PremiumFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-PremiumFrame.BorderSizePixel = 0
-PremiumFrame.Visible = false
-PremiumFrame.ZIndex = 10
-PremiumFrame.Parent = ScreenGui
-Instance.new("UICorner", PremiumFrame).CornerRadius = UDim.new(0, 10)
-
-local PremTitle = Instance.new("TextLabel")
-PremTitle.Size = UDim2.new(1, 0, 0, 35)
-PremTitle.Text = "👑 FUNÇÃO PREMIUM"
-PremTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
-PremTitle.BackgroundColor3 = Color3.fromRGB(40, 35, 55)
-PremTitle.Font = Enum.Font.SourceSansBold
-PremTitle.TextSize = 16
-PremTitle.ZIndex = 10
-PremTitle.Parent = PremiumFrame
-
-local PremDesc = Instance.new("TextLabel")
-PremDesc.Size = UDim2.new(1, -20, 0, 50)
-PremDesc.Position = UDim2.new(0, 10, 0, 40)
-PremDesc.Text = "Esta função é exclusiva para membros Premium!\nCompre na nossa loja para liberar."
-PremDesc.TextColor3 = Color3.fromRGB(220, 220, 220)
-PremDesc.BackgroundTransparency = 1
-PremDesc.Font = Enum.Font.SourceSans
-PremDesc.TextSize = 13
-PremDesc.TextWrapped = true
-PremDesc.ZIndex = 10
-PremDesc.Parent = PremiumFrame
-
-local BtnBuy = Instance.new("TextButton")
-BtnBuy.Size = UDim2.new(0.45, -5, 0, 35)
-BtnBuy.Position = UDim2.new(0.05, 0, 0, 95)
-BtnBuy.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-BtnBuy.Text = "🛒 Comprar"
-BtnBuy.TextColor3 = Color3.fromRGB(255, 255, 255)
-BtnBuy.Font = Enum.Font.SourceSansBold
-BtnBuy.TextSize = 14
-BtnBuy.ZIndex = 10
-BtnBuy.Parent = PremiumFrame
-Instance.new("UICorner", BtnBuy).CornerRadius = UDim.new(0, 6)
-
-local BtnCopy = Instance.new("TextButton")
-BtnCopy.Size = UDim2.new(0.45, -5, 0, 35)
-BtnCopy.Position = UDim2.new(0.5, 5, 0, 95)
-BtnCopy.BackgroundColor3 = Color3.fromRGB(60, 90, 150)
-BtnCopy.Text = "📋 Copiar Link"
-BtnCopy.TextColor3 = Color3.fromRGB(255, 255, 255)
-BtnCopy.Font = Enum.Font.SourceSansBold
-BtnCopy.TextSize = 14
-BtnCopy.ZIndex = 10
-BtnCopy.Parent = PremiumFrame
-Instance.new("UICorner", BtnCopy).CornerRadius = UDim.new(0, 6)
-
-local BtnClosePrem = Instance.new("TextButton")
-BtnClosePrem.Size = UDim2.new(0.9, 0, 0, 30)
-BtnClosePrem.Position = UDim2.new(0.05, 0, 0, 138)
-BtnClosePrem.BackgroundColor3 = Color3.fromRGB(80, 40, 40)
-BtnClosePrem.Text = "Fechar"
-BtnClosePrem.TextColor3 = Color3.fromRGB(255, 255, 255)
-BtnClosePrem.Font = Enum.Font.SourceSansSemibold
-BtnClosePrem.TextSize = 13
-BtnClosePrem.ZIndex = 10
-BtnClosePrem.Parent = PremiumFrame
-Instance.new("UICorner", BtnClosePrem).CornerRadius = UDim.new(0, 6)
-
-BtnBuy.MouseButton1Click:Connect(function()
-	BtnBuy.Text = "⏳ Teleportando..."
-	pcall(function()
-		TeleportService:Teleport(STORE_PLACE_ID, LocalPlayer)
-	end)
-end)
-
-BtnCopy.MouseButton1Click:Connect(function()
-	if setclipboard then
-		setclipboard(GAMEPASS_URL)
-		BtnCopy.Text = "✅ Link Copiado!"
-		task.delay(1.5, function() BtnCopy.Text = "📋 Copiar Link" end)
-	else
-		BtnCopy.Text = "❌ Não Suportado"
-		task.delay(1.5, function() BtnCopy.Text = "📋 Copiar Link" end)
-	end
-end)
-
-BtnClosePrem.MouseButton1Click:Connect(function()
-	PremiumFrame.Visible = false
-end)
-
-local function promptPremium()
-	if not checkPremium() then
-		PremiumFrame.Visible = true
-		return false
-	end
-	return true
+local function createButton(text, color, description)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 45)
+    container.Position = UDim2.new(0, 5, 0, 0)
+    container.BackgroundTransparency = 1
+    container.Parent = ScrollFrame
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundColor3 = color or Color3.fromRGB(55, 45, 25)
+    btn.TextColor3 = Color3.fromRGB(255, 240, 200)
+    btn.Text = text
+    btn.Font = Enum.Font.SourceSansSemibold
+    btn.TextSize = 13
+    btn.Parent = container
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    if description then
+        local desc = Instance.new("TextLabel")
+        desc.Size = UDim2.new(1, 0, 0, 15)
+        desc.Position = UDim2.new(0, 5, 1, -17)
+        desc.Text = description
+        desc.TextColor3 = Color3.fromRGB(180, 180, 180)
+        desc.Font = Enum.Font.SourceSans
+        desc.TextSize = 10
+        desc.BackgroundTransparency = 1
+        desc.TextXAlignment = Enum.TextXAlignment.Left
+        desc.Parent = container
+    end
+    
+    return btn
 end
 
-local function createButton(text, color, requiresPremium)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -10, 0, 38)
-	btn.Position = UDim2.new(0, 5, 0, 0)
-	
-	if isPremium then
-		btn.BackgroundColor3 = color or Color3.fromRGB(55, 45, 25)
-		btn.TextColor3 = Color3.fromRGB(255, 240, 200)
-	else
-		btn.BackgroundColor3 = color or Color3.fromRGB(45, 45, 60)
-		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	end
-	
-	if isPremium and requiresPremium then
-		btn.Text = "👑 " .. text
-	else
-		btn.Text = requiresPremium and ("🔒 " .. text .. " [PREMIUM]") or text
-	end
+-- ==========================================
+-- CRIAÇÃO DOS BOTÕES
+-- ==========================================
 
-	btn.Font = Enum.Font.SourceSansSemibold
-	btn.TextSize = 14
-	btn.Parent = ScrollFrame
-	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = btn
-	
-	return btn
-end
+local BtnTPMyBase = createButton("🏠 Teleportar para MINHA Base", Color3.fromRGB(150, 110, 20), "Precisa estar segurando uma Thing")
+local BtnCustomAnnounce = createButton("📢 Anúncio Personalizado", Color3.fromRGB(200, 50, 50), "Envia anúncio com texto customizado")
 
----------------------------------------------------------
--- FUNÇÕES DO PAINEL DE BOTÕES
----------------------------------------------------------
-local BtnSelectPlayer = createButton("👤 Selecionar Player: [Nenhum]", isPremium and Color3.fromRGB(50, 45, 30) or Color3.fromRGB(60, 60, 85), false)
-local BtnTPMyBase = createButton("🏠 Teleportar para MINHA Base", isPremium and Color3.fromRGB(150, 110, 20) or Color3.fromRGB(40, 130, 80), false)
-local BtnNoClip = createButton("🧱 No-Clip Passivo (OFF)", isPremium and Color3.fromRGB(50, 45, 30) or Color3.fromRGB(60, 60, 75), false)
+-- ==========================================
+-- CONEXÃO DOS BOTÕES
+-- ==========================================
 
-local PlayerListFrame = Instance.new("Frame")
-PlayerListFrame.Size = UDim2.new(0, 220, 0, 250)
-PlayerListFrame.Position = UDim2.new(1, 10, 0, 0)
-PlayerListFrame.BackgroundColor3 = isPremium and Color3.fromRGB(35, 30, 20) or Color3.fromRGB(25, 25, 35)
-PlayerListFrame.Visible = false
-PlayerListFrame.Parent = MainFrame
-Instance.new("UICorner", PlayerListFrame).CornerRadius = UDim.new(0, 8)
-
-local ListTitle = Instance.new("TextLabel")
-ListTitle.Size = UDim2.new(1, 0, 0, 30)
-ListTitle.Text = "Escolha o Jogador"
-ListTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-ListTitle.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(35, 35, 50)
-ListTitle.Font = Enum.Font.SourceSansBold
-ListTitle.TextSize = 14
-ListTitle.Parent = PlayerListFrame
-
-local ListScroll = Instance.new("ScrollingFrame")
-ListScroll.Size = UDim2.new(1, -10, 1, -40)
-ListScroll.Position = UDim2.new(0, 5, 0, 35)
-ListScroll.BackgroundTransparency = 1
-ListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-ListScroll.ScrollBarThickness = 4
-ListScroll.Parent = PlayerListFrame
-
-local function updatePlayerListUI()
-	ListScroll:ClearAllChildren()
-	local ListLayoutNew = Instance.new("UIListLayout")
-	ListLayoutNew.Parent = ListScroll
-	ListLayoutNew.Padding = UDim.new(0, 4)
-	
-	local count = 0
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= LocalPlayer then
-			count = count + 1
-			local pBtn = Instance.new("TextButton")
-			pBtn.Size = UDim2.new(1, 0, 0, 30)
-			pBtn.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(45, 45, 60)
-			pBtn.Text = p.Name
-			pBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-			pBtn.Font = Enum.Font.SourceSansSemibold
-			pBtn.TextSize = 13
-			pBtn.Parent = ListScroll
-			Instance.new("UICorner", pBtn).CornerRadius = UDim.new(0, 4)
-			
-			pBtn.MouseButton1Click:Connect(function()
-				TargetPlayerName = p.Name
-				BtnSelectPlayer.Text = "👤 Selecionar Player: [" .. TargetPlayerName .. "]"
-				PlayerListFrame.Visible = false
-				sendWebhook("FEATURE_USE", "Selecionou Player Alvo: " .. TargetPlayerName)
-				
-				local targetPlr = Players:FindFirstChild(TargetPlayerName)
-				local targetBase = targetPlr and getPlayerBase(targetPlr)
-				if targetBase then
-					for _, d in ipairs(targetBase:GetDescendants()) do
-						if d:IsA("BasePart") and (d.Name == "Hitbox" or d.Parent.Name == "Doors" or d.Name:lower():find("door")) then
-							d.CanCollide = false
-						end
-					end
-				end
-			end)
-		end
-	end
-	ListScroll.CanvasSize = UDim2.new(0, 0, 0, count * 34)
-end
-
-BtnSelectPlayer.MouseButton1Click:Connect(function()
-	PlayerListFrame.Visible = not PlayerListFrame.Visible
-	if PlayerListFrame.Visible then
-		updatePlayerListUI()
-	end
-end)
-
-local function teleportToMyBase()
-	local myBase = getPlayerBase(LocalPlayer)
-	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	
-	if myBase and hrp then
-		local dest = myBase:FindFirstChild("CollectZone", true) or myBase:FindFirstChild("Spawn", true) or myBase.PrimaryPart
-		if dest then
-			hrp.CFrame = dest.CFrame + Vector3.new(0, 4, 0)
-			sendWebhook("FEATURE_USE", "Teleportou para a própria Base")
-		end
-	else
-		BtnTPMyBase.Text = "❌ Sua base não foi encontrada!"
-		task.delay(1.5, function() BtnTPMyBase.Text = "🏠 Teleportar para MINHA Base" end)
-	end
-end
-
+-- Botão Teleport (usando a função corrigida)
 BtnTPMyBase.MouseButton1Click:Connect(teleportToMyBase)
 
-BtnNoClip.MouseButton1Click:Connect(function()
-	noClipEnabled = not noClipEnabled
-	sendWebhook("FEATURE_USE", "No-Clip Passivo: " .. (noClipEnabled and "ATIVADO" or "DESATIVADO"))
-	if noClipEnabled then
-		BtnNoClip.Text = "🧱 No-Clip Passivo (ON)"
-		BtnNoClip.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-		
-		noclipConnection = RunService.Stepped:Connect(function()
-			if LocalPlayer.Character and noClipEnabled then
-				for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.CanCollide = false
-					end
-				end
-			end
-		end)
-	else
-		BtnNoClip.Text = "🧱 No-Clip Passivo (OFF)"
-		BtnNoClip.BackgroundColor3 = isPremium and Color3.fromRGB(50, 45, 30) or Color3.fromRGB(60, 60, 75)
-		if noclipConnection then
-			noclipConnection:Disconnect()
-			noclipConnection = nil
-		end
-	end
+-- Botão Anúncio Personalizado
+BtnCustomAnnounce.MouseButton1Click:Connect(function()
+    createInputPopup("📢 Enviar Anúncio", "Digite o texto do anúncio...", function(text)
+        local Announcement = ReplicatedStorage:FindFirstChild("Remotes") and 
+                             ReplicatedStorage.Remotes:FindFirstChild("Events") and 
+                             ReplicatedStorage.Remotes.Events:FindFirstChild("Announcement")
+        
+        if Announcement then
+            pcall(function()
+                Announcement:FireServer("👑 " .. text, Color3.fromRGB(255,215,0))
+                showNotification("✅ Anúncio enviado: " .. text, false)
+            end)
+        else
+            showNotification("❌ Remote de anúncio não encontrado!", true)
+        end
+    end)
 end)
 
-ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
-	if player == LocalPlayer then
-		teleportToMyBase()
-	end
+-- ==========================================
+-- KEYBIND F2
+-- ==========================================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F2 then
+        ScreenGui.Enabled = not ScreenGui.Enabled
+    end
 end)
 
----------------------------------------------------------
--- ALCANCE EXTRA DE PROMPTS DE LONGE (PREMIUM)
----------------------------------------------------------
-local BtnExtendedPrompt = createButton("📡 Alcance Extra de Interação (OFF)", nil, true)
-
-BtnExtendedPrompt.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	extendedPromptEnabled = not extendedPromptEnabled
-	sendWebhook("FEATURE_USE", "Alcance Extra de Interação (50m): " .. (extendedPromptEnabled and "ATIVADO" or "DESATIVADO"))
-	if extendedPromptEnabled then
-		BtnExtendedPrompt.Text = isPremium and "👑 📡 Alcance Extra de Interação (ON)" or "📡 Alcance Extra de Interação (ON)"
-		BtnExtendedPrompt.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-		
-		extendedPromptConnection = RunService.Heartbeat:Connect(function()
-			if not extendedPromptEnabled or not isPremium then return end
-			for _, prompt in ipairs(Workspace:GetDescendants()) do
-				if prompt:IsA("ProximityPrompt") then
-					if not originalPromptDistances[prompt] then
-						originalPromptDistances[prompt] = prompt.MaxActivationDistance
-					end
-					prompt.MaxActivationDistance = 50
-				end
-			end
-		end)
-	else
-		BtnExtendedPrompt.Text = isPremium and "👑 📡 Alcance Extra de Interação (OFF)" or "🔒 📡 Alcance Extra de Interação [PREMIUM]"
-		BtnExtendedPrompt.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-		
-		if extendedPromptConnection then
-			extendedPromptConnection:Disconnect()
-			extendedPromptConnection = nil
-		end
-		
-		for prompt, dist in pairs(originalPromptDistances) do
-			if prompt and prompt.Parent then
-				prompt.MaxActivationDistance = dist
-			end
-		end
-		originalPromptDistances = {}
-	end
-end)
-
----------------------------------------------------------
--- ANTI-ROUBO AUTO-BAT (PREMIUM)
----------------------------------------------------------
-local BtnAntiSteal = createButton("🛡️ Anti-Roubo Auto-Bat (OFF)", nil, true)
-
-local function equipAndUseBat()
-	local char = LocalPlayer.Character
-	if not char then return nil end
-	
-	local bat = char:FindFirstChild("Bat") or LocalPlayer.Backpack:FindFirstChild("Bat")
-	if bat then
-		if bat.Parent == LocalPlayer.Backpack then
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			if hum then
-				hum:EquipTool(bat)
-			end
-		end
-		bat:Activate()
-		return bat
-	end
-	return nil
+-- ==========================================
+-- SISTEMA DE DETECÇÃO DE THING (CONSOLE DEBUG)
+-- ==========================================
+local function debugThingDetection()
+    local char = LocalPlayer.Character
+    if not char then 
+        print("❌ Personagem não encontrado")
+        return 
+    end
+    
+    print("=== DEBUG: DETECÇÃO DE THING ===")
+    print("Personagem:", char.Name)
+    
+    -- Verifica Tools
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        print("✅ Tool encontrada:", tool.Name)
+        for _, child in ipairs(tool:GetChildren()) do
+            print("  - Tool child:", child.Name, child.ClassName)
+        end
+    else
+        print("❌ Nenhuma Tool encontrada")
+    end
+    
+    -- Verifica Models
+    for _, child in ipairs(char:GetChildren()) do
+        if child:IsA("Model") then
+            print("📦 Model encontrado:", child.Name)
+            for _, subChild in ipairs(child:GetChildren()) do
+                print("  - Child:", subChild.Name, subChild.ClassName)
+            end
+        end
+    end
+    
+    -- Verifica Welds
+    for _, weld in ipairs(char:GetDescendants()) do
+        if weld:IsA("Weld") or weld:IsA("Motor6D") then
+            print("🔗 Weld/Motor6D encontrado:", weld.Name)
+            if weld.Part0 and weld.Part1 then
+                print("  - Part0:", weld.Part0.Name, "Parent:", weld.Part0.Parent and weld.Part0.Parent.Name or "nil")
+                print("  - Part1:", weld.Part1.Name, "Parent:", weld.Part1.Parent and weld.Part1.Parent.Name or "nil")
+            end
+        end
+    end
+    
+    print("Resultado final isHoldingThing():", isHoldingThing())
 end
 
-BtnAntiSteal.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	antiStealEnabled = not antiStealEnabled
-	sendWebhook("FEATURE_USE", "Anti-Roubo Auto-Bat: " .. (antiStealEnabled and "ATIVADO" or "DESATIVADO"))
-	if antiStealEnabled then
-		BtnAntiSteal.Text = isPremium and "👑 🛡️ Anti-Roubo Auto-Bat (ON)" or "🛡️ Anti-Roubo Auto-Bat (ON)"
-		BtnAntiSteal.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-		
-		antiStealConnection = RunService.Heartbeat:Connect(function()
-			if not antiStealEnabled then return end
-			
-			local myBase = getPlayerBase(LocalPlayer)
-			local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-			if not myBase or not myHrp then return end
-			
-			local collectPart = myBase:FindFirstChild("CollectZone", true) or myBase:FindFirstChild("Spawn", true)
-			if not collectPart then return end
-			
-			for _, p in ipairs(Players:GetPlayers()) do
-				if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-					local enemyHrp = p.Character.HumanoidRootPart
-					local dist = (enemyHrp.Position - collectPart.Position).Magnitude
-					
-					if dist < 20 then
-						equipAndUseBat()
-						myHrp.CFrame = enemyHrp.CFrame * CFrame.new(0, 0, 1)
-						
-						local vel = myHrp.Velocity
-						myHrp.Velocity = Vector3.new(10000, 10000, 10000)
-						RunService.RenderStepped:Wait()
-						myHrp.Velocity = vel
-					end
-				end
-			end
-		end)
-	else
-		BtnAntiSteal.Text = isPremium and "👑 🛡️ Anti-Roubo Auto-Bat (OFF)" or "🔒 🛡️ Anti-Roubo Auto-Bat [PREMIUM]"
-		BtnAntiSteal.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-		if antiStealConnection then
-			antiStealConnection:Disconnect()
-			antiStealConnection = nil
-		end
-	end
-end)
+-- Comando para debug no console
+_G.debugThing = debugThingDetection
 
----------------------------------------------------------
--- MINI-DASH & FLING (PREMIUM)
----------------------------------------------------------
-local BtnMiniDash = createButton("⚡ Mini-Dash Curto", nil, true)
-local BtnFling = createButton("🌀 Fling Player Selecionado / Geral (OFF)", nil, true)
+print("✅ Script carregado! Pressione F2 para abrir/fechar.")
+print("📋 Digite _G.debugThing() no console (F9) para debug da detecção de Thing.")
+showNotification("🚀 Script corrigido carregado! F2 para abrir/fechar.", false)
 
-BtnMiniDash.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, -3)
-		sendWebhook("FEATURE_USE", "Usou Mini-Dash")
-	end
-end)
 
-BtnFling.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	flingEnabled = not flingEnabled
-	sendWebhook("FEATURE_USE", "Fling: " .. (flingEnabled and "ATIVADO" or "DESATIVADO"))
-	if flingEnabled then
-		BtnFling.Text = isPremium and "👑 🌀 Fling (ON)" or "🌀 Fling (ON)"
-		BtnFling.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-		
-		flingConnection = RunService.Heartbeat:Connect(function()
-			local char = LocalPlayer.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			
-			if hrp and flingEnabled then
-				for _, part in ipairs(char:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.CanCollide = false
-					end
-				end
-				
-				if TargetPlayerName ~= "" then
-					local targetPlr = Players:FindFirstChild(TargetPlayerName)
-					if targetPlr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart") then
-						hrp.CFrame = targetPlr.Character.HumanoidRootPart.CFrame
-					end
-				end
-				
-				local vel = hrp.Velocity
-				hrp.Velocity = Vector3.new(10000, 10000, 10000)
-				RunService.RenderStepped:Wait()
-				hrp.Velocity = vel
-			end
-		end)
-	else
-		BtnFling.Text = isPremium and "👑 🌀 Fling Player Selecionado / Geral (OFF)" or "🔒 🌀 Fling Player Selecionado / Geral [PREMIUM]"
-		BtnFling.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-		if flingConnection then
-			flingConnection:Disconnect()
-			flingConnection = nil
-		end
-	end
-end)
-
----------------------------------------------------------
--- UNDERFLOOR WALK & X-RAY (PREMIUM)
----------------------------------------------------------
-local BtnUnderfloor = createButton("👻 Andar Sob o Chão + X-Ray (OFF)", nil, true)
-
-BtnUnderfloor.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	underfloorEnabled = not underfloorEnabled
-	sendWebhook("FEATURE_USE", "Underfloor + X-Ray: " .. (underfloorEnabled and "ATIVADO" or "DESATIVADO"))
-	local char = LocalPlayer.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	
-	if underfloorEnabled and hrp then
-		BtnUnderfloor.Text = isPremium and "👑 👻 Andar Sob o Chão + X-Ray (ON)" or "👻 Andar Sob o Chão + X-Ray (ON)"
-		BtnUnderfloor.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-		
-		hrp.CFrame = hrp.CFrame * CFrame.new(0, -7, 0)
-		
-		if not underfloorPlatform then
-			underfloorPlatform = Instance.new("Part")
-			underfloorPlatform.Name = "UnderfloorFloor"
-			underfloorPlatform.Size = Vector3.new(1000, 2, 1000)
-			underfloorPlatform.Transparency = 1
-			underfloorPlatform.Anchored = true
-			underfloorPlatform.CanCollide = true
-			underfloorPlatform.Position = hrp.Position - Vector3.new(0, 3.5, 0)
-			underfloorPlatform.Parent = Workspace
-		end
-		
-		for _, part in ipairs(Workspace:GetDescendants()) do
-			if part:IsA("BasePart") and not part:IsDescendantOf(char) and part ~= underfloorPlatform then
-				if not originalTransparencies[part] then
-					originalTransparencies[part] = part.Transparency
-				end
-				part.Transparency = 0.6
-			end
-		end
-	else
-		BtnUnderfloor.Text = isPremium and "👑 👻 Andar Sob o Chão + X-Ray (OFF)" or "🔒 👻 Andar Sob o Chão + X-Ray [PREMIUM]"
-		BtnUnderfloor.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-		
-		if hrp then
-			hrp.CFrame = hrp.CFrame * CFrame.new(0, 8, 0)
-		end
-		
-		if underfloorPlatform then
-			underfloorPlatform:Destroy()
-			underfloorPlatform = nil
-		end
-		
-		for part, trans in pairs(originalTransparencies) do
-			if part and part.Parent then
-				part.Transparency = trans
-			end
-		end
-		originalTransparencies = {}
-	end
-end)
-
----------------------------------------------------------
--- FLY SYSTEM (PREMIUM)
----------------------------------------------------------
-local BtnFly = createButton("✈️ Fly / Voador (OFF) [Tecla F]", nil, true)
-
-local function toggleFly()
-	if not promptPremium() then return end
-	
-	flying = not flying
-	sendWebhook("FEATURE_USE", "Fly (Voador): " .. (flying and "ATIVADO" or "DESATIVADO"))
-	local char = LocalPlayer.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	
-	if flying and hrp then
-		BtnFly.Text = isPremium and "👑 ✈️ Fly / Voador (ON) [Tecla F]" or "✈️ Fly / Voador (ON) [Tecla F]"
-		BtnFly.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-		
-		local camera = Workspace.CurrentCamera
-		local bodyVelocity = Instance.new("BodyVelocity")
-		bodyVelocity.Name = "FlyVelocity"
-		bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-		bodyVelocity.Velocity = Vector3.zero
-		bodyVelocity.Parent = hrp
-		
-		flyConnection = RunService.RenderStepped:Connect(function()
-			if not flying or not hrp:FindFirstChild("FlyVelocity") then
-				if flyConnection then flyConnection:Disconnect() end
-				return
-			end
-			
-			local moveVector = Vector3.zero
-			if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + camera.CFrame.LookVector end
-			if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - camera.CFrame.LookVector end
-			if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector - camera.CFrame.RightVector end
-			if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + camera.CFrame.RightVector end
-			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveVector = moveVector + Vector3.new(0, 1, 0) end
-			if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveVector = moveVector - Vector3.new(0, 1, 0) end
-			
-			bodyVelocity.Velocity = moveVector * flySpeed
-		end)
-	else
-		BtnFly.Text = isPremium and "👑 ✈️ Fly / Voador (OFF) [Tecla F]" or "🔒 ✈️ Fly / Voador [PREMIUM]"
-		BtnFly.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-		if hrp and hrp:FindFirstChild("FlyVelocity") then
-			hrp.FlyVelocity:Destroy()
-		end
-		if flyConnection then
-			flyConnection:Disconnect()
-			flyConnection = nil
-		end
-	end
-end
-
-BtnFly.MouseButton1Click:Connect(toggleFly)
-
-UserInputService.InputBegan:Connect(function(input, gpe)
-	if not gpe and input.KeyCode == Enum.KeyCode.F then
-		toggleFly()
-	end
-end)
-
----------------------------------------------------------
--- ESP THINGS (PREMIUM)
----------------------------------------------------------
-local BtnESP = createButton("👁️ ESP Things Nas Bases (OFF)", nil, true)
-local espFolder = Instance.new("Folder", Workspace)
-espFolder.Name = "ThingsESP_BasesOnly"
-
-local function clearESP()
-	espFolder:ClearAllChildren()
-end
-
-local function updateThingsESP()
-	clearESP()
-	if not espEnabled or not isPremium then return end
-	
-	local mapBases = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Bases") or Workspace:FindFirstChild("Bases")
-	if not mapBases then return end
-	
-	for _, base in ipairs(mapBases:GetChildren()) do
-		for _, desc in ipairs(base:GetDescendants()) do
-			if desc:IsA("Model") and (desc.Parent and desc.Parent.Name == "Slots" or desc:FindFirstChild("Configuration")) then
-				local cfg = desc:FindFirstChild("Configuration")
-				if cfg then
-					local thingVal = cfg:FindFirstChild("Thing") and cfg.Thing.Value
-					
-					if thingVal and typeof(thingVal) == "Instance" then
-						local name = thingVal.Name
-						local mutation = cfg:FindFirstChild("Mutation") and cfg.Mutation.Value or "Nenhuma"
-						local rarity = cfg:FindFirstChild("Rarity") and cfg.Rarity.Value or cfg:FindFirstChild("RebirthRequired") and ("Rebirth " .. tostring(cfg.RebirthRequired.Value)) or "Comum"
-						local incomeGen = cfg:FindFirstChild("Income") and cfg.Income.Value or cfg:FindFirstChild("Multiplier") and (tostring(cfg.Multiplier.Value) .. "x") or "1x"
-						
-						local targetPart = thingVal.PrimaryPart or desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
-						
-						if targetPart then
-							local billboard = Instance.new("BillboardGui")
-							billboard.Name = "ThingsESP"
-							billboard.AlwaysOnTop = true
-							billboard.Size = UDim2.new(0, 200, 0, 45)
-							billboard.Adornee = targetPart
-							billboard.Parent = espFolder
-							
-							local textFrame = Instance.new("TextLabel")
-							textFrame.Size = UDim2.new(1, 0, 1, 0)
-							textFrame.BackgroundTransparency = 1
-							textFrame.TextColor3 = Color3.fromRGB(255, 230, 100)
-							textFrame.TextStrokeTransparency = 0
-							textFrame.Font = Enum.Font.SourceSansBold
-							textFrame.TextSize = 13
-							
-							local details = string.format("📦 %s\n⭐ Raridade: %s | 💰 Gera: %s", name, tostring(rarity), tostring(incomeGen))
-							if mutation ~= "Nenhuma" and mutation ~= "" then
-								details = details .. "\n🧬 Mutação: " .. tostring(mutation)
-							end
-							
-							textFrame.Text = details
-							textFrame.Parent = billboard
-						end
-					end
-				end
-			end
-		end
-	end
-end
-
-BtnESP.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	espEnabled = not espEnabled
-	sendWebhook("FEATURE_USE", "ESP Things: " .. (espEnabled and "ATIVADO" or "DESATIVADO"))
-	if espEnabled then
-		BtnESP.Text = isPremium and "👑 👁️ ESP Things Nas Bases (ON)" or "👁️ ESP Things Nas Bases (ON)"
-		BtnESP.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-		task.spawn(function()
-			while espEnabled and isPremium do
-				updateThingsESP()
-				task.wait(3)
-			end
-		end)
-	else
-		BtnESP.Text = isPremium and "👑 👁️ ESP Things Nas Bases (OFF)" or "🔒 👁️ ESP Things Nas Bases [PREMIUM]"
-		BtnESP.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-		clearESP()
-	end
-end)
-
----------------------------------------------------------
--- PULO INFINITO & ANTI-RAGDOLL (PREMIUM)
----------------------------------------------------------
-local BtnInfJump = createButton("🦘 Pulo Infinito (OFF)", nil, true)
-local BtnAntiRagdoll = createButton("🛡️ Anti-Ragdoll (OFF)", nil, true)
-
-UserInputService.JumpRequest:Connect(function()
-	if infiniteJumpEnabled and isPremium and LocalPlayer.Character then
-		local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum:ChangeState(Enum.HumanoidStateType.Jumping)
-		end
-	end
-end)
-
-BtnInfJump.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	infiniteJumpEnabled = not infiniteJumpEnabled
-	sendWebhook("FEATURE_USE", "Pulo Infinito: " .. (infiniteJumpEnabled and "ATIVADO" or "DESATIVADO"))
-	if infiniteJumpEnabled then
-		BtnInfJump.Text = isPremium and "👑 🦘 Pulo Infinito (ON)" or "🦘 Pulo Infinito (ON)"
-		BtnInfJump.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-	else
-		BtnInfJump.Text = isPremium and "👑 🦘 Pulo Infinito (OFF)" or "🔒 🦘 Pulo Infinito [PREMIUM]"
-		BtnInfJump.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-	end
-end)
-
-local function applyAntiRagdoll()
-	if antiRagdollConnection then antiRagdollConnection:Disconnect() end
-	
-	antiRagdollConnection = RunService.Heartbeat:Connect(function()
-		if not antiRagdollEnabled or not isPremium then return end
-		local char = LocalPlayer.Character
-		if not char then return end
-		
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-			hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-			if hum.PlatformStand then hum.PlatformStand = false end
-		end
-		
-		for _, inst in ipairs(char:GetDescendants()) do
-			if inst.Name == "RagdollConstraint" or inst.Name == "ColliderPart" then
-				inst:Destroy()
-			elseif inst:IsA("Motor6D") and not inst.Enabled then
-				inst.Enabled = true
-			end
-		end
-	end)
-end
-
-BtnAntiRagdoll.MouseButton1Click:Connect(function()
-	if not promptPremium() then return end
-	
-	antiRagdollEnabled = not antiRagdollEnabled
-	sendWebhook("FEATURE_USE", "Anti-Ragdoll: " .. (antiRagdollEnabled and "ATIVADO" or "DESATIVADO"))
-	if antiRagdollEnabled then
-		BtnAntiRagdoll.Text = isPremium and "👑 🛡️ Anti-Ragdoll (ON)" or "🛡️ Anti-Ragdoll (ON)"
-		BtnAntiRagdoll.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
-		applyAntiRagdoll()
-	else
-		BtnAntiRagdoll.Text = isPremium and "👑 🛡️ Anti-Ragdoll (OFF)" or "🔒 🛡️ Anti-Ragdoll [PREMIUM]"
-		BtnAntiRagdoll.BackgroundColor3 = isPremium and Color3.fromRGB(55, 45, 25) or Color3.fromRGB(60, 60, 75)
-		if antiRagdollConnection then
-			antiRagdollConnection:Disconnect()
-			antiRagdollConnection = nil
-		end
-	end
-end)
-
-LocalPlayer.CharacterAdded:Connect(function()
-	if antiRagdollEnabled and isPremium then
-		applyAntiRagdoll()
-	end
-end)
 -- ==========================================
 -- MIGUEL SEU OTARIO KKKKKKKKKKKKKK, QUEM MANDO MEXER COM O LELOWETL https://discord.com/invite/jbwKVZMbeV
 -- ==========================================
