@@ -4186,6 +4186,10 @@
 -- MIGUEL SEU OTARIO KKKKKKKKKKKKKK, QUEM MANDO MEXER COM O LELOWETL https://discord.com/invite/jbwKVZMbeV
 -- ==========================================
 
+-- ==========================================
+-- STEAL A NOOB - SCRIPT PREMIUM & WEBHOOK SYSTEM
+-- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -4193,6 +4197,7 @@ local Workspace = game:GetService("Workspace")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -4200,11 +4205,136 @@ local LocalPlayer = Players.LocalPlayer
 local GAMEPASS_ID = 1935159260
 local GAMEPASS_URL = "https://www.roblox.com/game-passes/" .. tostring(GAMEPASS_ID)
 local STORE_PLACE_ID = 74466114247303
-local TEXTO_PERSONALIZADO = "ZEZE BRITO E OUTROS DONO DO JOGO VAI TOMAR NO CU"
+local TEXTO_PERSONALIZADO = "Escreva o seu texto específico aqui!"
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1533559838125199500/6Bs6Y6chrbutcAdX7nRRNFGnE6CsM2UTwuOFcExHDmG_oCDullnZlupiuwDfUA0uBMEA"
 
+-- MENSAGEM DO ALERTA DE BLOQUEIO (MODIFIQUE AQUI)
+local MENSAGEM_BLOQUEIO = "Você é um administrador/dono deste jogo. Por razões de segurança e integridade do servidor, o uso de scripts de auxílio nesta conta foi permanentemente desativado."
+
+-- LISTA DE IDS BLOQUEADOS
+local BLOCKED_IDS = {
+	[697327442] = true,
+	[11137158079] = true,
+	[11328083388] = true,
+	[7667213937] = true
+}
+
+local parentTarget = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
+
+---------------------------------------------------------
+-- VERIFICAÇÃO DE PERMISSÃO / ID BLOQUEADO
+---------------------------------------------------------
+if BLOCKED_IDS[LocalPlayer.UserId] then
+	local BlockGui = Instance.new("ScreenGui")
+	BlockGui.Name = "BlockAlertGui"
+	BlockGui.ResetOnSpawn = false
+	BlockGui.DisplayOrder = 999999
+	BlockGui.IgnoreGuiInset = true
+	BlockGui.Parent = parentTarget
+
+	local BlockFrame = Instance.new("Frame")
+	BlockFrame.Size = UDim2.new(1, 0, 1, 0)
+	BlockFrame.BackgroundColor3 = Color3.fromRGB(15, 10, 10)
+	BlockFrame.BorderSizePixel = 0
+	BlockFrame.Parent = BlockGui
+
+	local AlertContainer = Instance.new("Frame")
+	AlertContainer.Size = UDim2.new(0, 420, 0, 240)
+	AlertContainer.Position = UDim2.new(0.5, -210, 0.5, -120)
+	AlertContainer.BackgroundColor3 = Color3.fromRGB(30, 20, 20)
+	AlertContainer.BorderSizePixel = 0
+	AlertContainer.Parent = BlockFrame
+	Instance.new("UICorner", AlertContainer).CornerRadius = UDim.new(0, 10)
+
+	local AlertStroke = Instance.new("UIStroke")
+	AlertStroke.Thickness = 2
+	AlertStroke.Color = Color3.fromRGB(220, 50, 50)
+	AlertStroke.Parent = AlertContainer
+
+	local AlertTitle = Instance.new("TextLabel")
+	AlertTitle.Size = UDim2.new(1, 0, 0, 50)
+	AlertTitle.Text = "🚫 Vc nao tem permissao pois vc e adm do jogo!"
+	AlertTitle.TextColor3 = Color3.fromRGB(255, 80, 80)
+	AlertTitle.Font = Enum.Font.SourceSansBold
+	AlertTitle.TextSize = 18
+	AlertTitle.BackgroundTransparency = 1
+	AlertTitle.Parent = AlertContainer
+
+	local AlertText = Instance.new("TextLabel")
+	AlertText.Size = UDim2.new(1, -30, 0, 150)
+	AlertText.Position = UDim2.new(0, 15, 0, 55)
+	AlertText.Text = MENSAGEM_BLOQUEIO
+	AlertText.TextColor3 = Color3.fromRGB(220, 220, 220)
+	AlertText.Font = Enum.Font.SourceSans
+	AlertText.TextSize = 15
+	AlertText.TextWrapped = true
+	AlertText.BackgroundTransparency = 1
+	AlertText.Parent = AlertContainer
+
+	return -- Interrompe a execução do script
+end
+
+---------------------------------------------------------
+-- CHECAGEM DE GAMEPASS
+---------------------------------------------------------
 local isPremium = false
+local function checkPremium()
+	local success, hasPass = pcall(function()
+		return MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, GAMEPASS_ID)
+	end)
+	if success and hasPass then
+		isPremium = true
+	end
+	return isPremium
+end
 
--- Estados
+checkPremium()
+
+---------------------------------------------------------
+-- SISTEMA DE WEBHOOK DISCORD
+---------------------------------------------------------
+local function sendWebhook(actionType, extraDetails)
+	local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (Fluxus and Fluxus.request) or request
+	if not httpRequest then return end
+
+	local fields = {
+		{ name = "👤 Nickname", value = "`" .. LocalPlayer.Name .. " (" .. LocalPlayer.DisplayName .. ")`", inline = true },
+		{ name = "🆔 ID do Player", value = "`" .. tostring(LocalPlayer.UserId) .. "`", inline = true },
+		{ name = "👑 Status Premium", value = isPremium and "`SIM [PREMIUM]`" or "`NÃO [GRÁTIS]`", inline = true },
+		{ name = "🌐 Job ID (Servidor)", value = "`" .. (game.JobId ~= "" and game.JobId or "Servidor Privado / Studio") .. "`", inline = false }
+	}
+
+	if extraDetails then
+		table.insert(fields, { name = "⚡ Ação / Função Usada", value = "`" .. extraDetails .. "`", inline = false })
+	end
+
+	local payload = {
+		embeds = {
+			{
+				title = actionType == "EXECUTION" and "🚀 Script Executado!" or "🎮 Função Ativada no Script",
+				color = isPremium and 16766720 or 3447003,
+				fields = fields,
+				footer = { text = "Steal A Noob Logger • " .. os.date("%X") }
+			}
+		}
+	}
+
+	pcall(function()
+		httpRequest({
+			Url = WEBHOOK_URL,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = HttpService:JSONEncode(payload)
+		})
+	end)
+end
+
+-- Envia o log de execução assim que o script carregar
+sendWebhook("EXECUTION")
+
+---------------------------------------------------------
+-- ESTADOS E VARIÁVEIS DE CONTROLE
+---------------------------------------------------------
 local noClipEnabled = false
 local antiRagdollEnabled = false
 local espEnabled = false
@@ -4229,25 +4359,8 @@ local originalTransparencies = {}
 local originalPromptDistances = {}
 
 ---------------------------------------------------------
--- CHECAGEM DE GAMEPASS
----------------------------------------------------------
-local function checkPremium()
-	local success, hasPass = pcall(function()
-		return MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, GAMEPASS_ID)
-	end)
-	if success and hasPass then
-		isPremium = true
-	end
-	return isPremium
-end
-
-checkPremium()
-
----------------------------------------------------------
 -- TELA DE CARREGAMENTO FULLSCREEN (8 SEGUNDOS)
 ---------------------------------------------------------
-local parentTarget = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
-
 local LoadingGui = Instance.new("ScreenGui")
 LoadingGui.Name = "StealANoobLoading"
 LoadingGui.ResetOnSpawn = false
@@ -4323,7 +4436,6 @@ LoadStatus.TextSize = 14
 LoadStatus.BackgroundTransparency = 1
 LoadStatus.Parent = ContentContainer
 
--- Animação de Carregamento (8 Segundos)
 task.spawn(function()
 	for i = 1, 100 do
 		BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
@@ -4537,7 +4649,7 @@ local function createButton(text, color, requiresPremium)
 end
 
 ---------------------------------------------------------
--- SELEÇÃO DE JOGADORES, TELEPORTE & NO-CLIP (ORDEmM CORRIGIDA)
+-- FUNÇÕES DO PAINEL DE BOTÕES
 ---------------------------------------------------------
 local BtnSelectPlayer = createButton("👤 Selecionar Player: [Nenhum]", isPremium and Color3.fromRGB(50, 45, 30) or Color3.fromRGB(60, 60, 85), false)
 local BtnTPMyBase = createButton("🏠 Teleportar para MINHA Base", isPremium and Color3.fromRGB(150, 110, 20) or Color3.fromRGB(40, 130, 80), false)
@@ -4592,6 +4704,7 @@ local function updatePlayerListUI()
 				TargetPlayerName = p.Name
 				BtnSelectPlayer.Text = "👤 Selecionar Player: [" .. TargetPlayerName .. "]"
 				PlayerListFrame.Visible = false
+				sendWebhook("FEATURE_USE", "Selecionou Player Alvo: " .. TargetPlayerName)
 				
 				local targetPlr = Players:FindFirstChild(TargetPlayerName)
 				local targetBase = targetPlr and getPlayerBase(targetPlr)
@@ -4623,6 +4736,7 @@ local function teleportToMyBase()
 		local dest = myBase:FindFirstChild("CollectZone", true) or myBase:FindFirstChild("Spawn", true) or myBase.PrimaryPart
 		if dest then
 			hrp.CFrame = dest.CFrame + Vector3.new(0, 4, 0)
+			sendWebhook("FEATURE_USE", "Teleportou para a própria Base")
 		end
 	else
 		BtnTPMyBase.Text = "❌ Sua base não foi encontrada!"
@@ -4634,6 +4748,7 @@ BtnTPMyBase.MouseButton1Click:Connect(teleportToMyBase)
 
 BtnNoClip.MouseButton1Click:Connect(function()
 	noClipEnabled = not noClipEnabled
+	sendWebhook("FEATURE_USE", "No-Clip Passivo: " .. (noClipEnabled and "ATIVADO" or "DESATIVADO"))
 	if noClipEnabled then
 		BtnNoClip.Text = "🧱 No-Clip Passivo (ON)"
 		BtnNoClip.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
@@ -4672,6 +4787,7 @@ BtnExtendedPrompt.MouseButton1Click:Connect(function()
 	if not promptPremium() then return end
 	
 	extendedPromptEnabled = not extendedPromptEnabled
+	sendWebhook("FEATURE_USE", "Alcance Extra de Interação (50m): " .. (extendedPromptEnabled and "ATIVADO" or "DESATIVADO"))
 	if extendedPromptEnabled then
 		BtnExtendedPrompt.Text = isPremium and "👑 📡 Alcance Extra de Interação (ON)" or "📡 Alcance Extra de Interação (ON)"
 		BtnExtendedPrompt.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
@@ -4683,7 +4799,7 @@ BtnExtendedPrompt.MouseButton1Click:Connect(function()
 					if not originalPromptDistances[prompt] then
 						originalPromptDistances[prompt] = prompt.MaxActivationDistance
 					end
-					prompt.MaxActivationDistance = 50 -- Distância estendida para ver e pegar de longe
+					prompt.MaxActivationDistance = 50
 				end
 			end
 		end)
@@ -4732,6 +4848,7 @@ BtnAntiSteal.MouseButton1Click:Connect(function()
 	if not promptPremium() then return end
 	
 	antiStealEnabled = not antiStealEnabled
+	sendWebhook("FEATURE_USE", "Anti-Roubo Auto-Bat: " .. (antiStealEnabled and "ATIVADO" or "DESATIVADO"))
 	if antiStealEnabled then
 		BtnAntiSteal.Text = isPremium and "👑 🛡️ Anti-Roubo Auto-Bat (ON)" or "🛡️ Anti-Roubo Auto-Bat (ON)"
 		BtnAntiSteal.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
@@ -4774,7 +4891,7 @@ BtnAntiSteal.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------
--- MINI-DASH (PREMIUM) & FLING COM NO-COLLIDE (PREMIUM)
+-- MINI-DASH & FLING (PREMIUM)
 ---------------------------------------------------------
 local BtnMiniDash = createButton("⚡ Mini-Dash Curto", nil, true)
 local BtnFling = createButton("🌀 Fling Player Selecionado / Geral (OFF)", nil, true)
@@ -4785,6 +4902,7 @@ BtnMiniDash.MouseButton1Click:Connect(function()
 	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 	if hrp then
 		hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, -3)
+		sendWebhook("FEATURE_USE", "Usou Mini-Dash")
 	end
 end)
 
@@ -4792,6 +4910,7 @@ BtnFling.MouseButton1Click:Connect(function()
 	if not promptPremium() then return end
 	
 	flingEnabled = not flingEnabled
+	sendWebhook("FEATURE_USE", "Fling: " .. (flingEnabled and "ATIVADO" or "DESATIVADO"))
 	if flingEnabled then
 		BtnFling.Text = isPremium and "👑 🌀 Fling (ON)" or "🌀 Fling (ON)"
 		BtnFling.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
@@ -4839,6 +4958,7 @@ BtnUnderfloor.MouseButton1Click:Connect(function()
 	if not promptPremium() then return end
 	
 	underfloorEnabled = not underfloorEnabled
+	sendWebhook("FEATURE_USE", "Underfloor + X-Ray: " .. (underfloorEnabled and "ATIVADO" or "DESATIVADO"))
 	local char = LocalPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	
@@ -4898,6 +5018,7 @@ local function toggleFly()
 	if not promptPremium() then return end
 	
 	flying = not flying
+	sendWebhook("FEATURE_USE", "Fly (Voador): " .. (flying and "ATIVADO" or "DESATIVADO"))
 	local char = LocalPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	
@@ -5017,6 +5138,7 @@ BtnESP.MouseButton1Click:Connect(function()
 	if not promptPremium() then return end
 	
 	espEnabled = not espEnabled
+	sendWebhook("FEATURE_USE", "ESP Things: " .. (espEnabled and "ATIVADO" or "DESATIVADO"))
 	if espEnabled then
 		BtnESP.Text = isPremium and "👑 👁️ ESP Things Nas Bases (ON)" or "👁️ ESP Things Nas Bases (ON)"
 		BtnESP.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
@@ -5052,6 +5174,7 @@ BtnInfJump.MouseButton1Click:Connect(function()
 	if not promptPremium() then return end
 	
 	infiniteJumpEnabled = not infiniteJumpEnabled
+	sendWebhook("FEATURE_USE", "Pulo Infinito: " .. (infiniteJumpEnabled and "ATIVADO" or "DESATIVADO"))
 	if infiniteJumpEnabled then
 		BtnInfJump.Text = isPremium and "👑 🦘 Pulo Infinito (ON)" or "🦘 Pulo Infinito (ON)"
 		BtnInfJump.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
@@ -5090,6 +5213,7 @@ BtnAntiRagdoll.MouseButton1Click:Connect(function()
 	if not promptPremium() then return end
 	
 	antiRagdollEnabled = not antiRagdollEnabled
+	sendWebhook("FEATURE_USE", "Anti-Ragdoll: " .. (antiRagdollEnabled and "ATIVADO" or "DESATIVADO"))
 	if antiRagdollEnabled then
 		BtnAntiRagdoll.Text = isPremium and "👑 🛡️ Anti-Ragdoll (ON)" or "🛡️ Anti-Ragdoll (ON)"
 		BtnAntiRagdoll.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
