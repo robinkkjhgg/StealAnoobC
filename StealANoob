@@ -4198,6 +4198,10 @@
 -- STEAL A NOOB - SCRIPT COMPLETO CORRIGIDO
 -- ==========================================
 
+-- ==========================================
+-- STEAL A NOOB - SCRIPT COMPLETO CORRIGIDO
+-- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
