@@ -4194,12 +4194,17 @@
 -- STEAL A NOOB - SCRIPT CORRIGIDO (DETECÇÃO DE THING MELHORADA)
 -- ==========================================
 
+-- ==========================================
+-- STEAL A NOOB - SCRIPT COMPLETO CORRIGIDO
+-- ==========================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local parentTarget = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
@@ -4211,10 +4216,9 @@ local function isHoldingThing()
     local char = LocalPlayer.Character
     if not char then return false end
 
-    -- 1. Verifica se tem uma Tool equipada (mais comum)
+    -- 1. Verifica Tools
     local tool = char:FindFirstChildOfClass("Tool")
     if tool then
-        -- Verifica se a Tool tem alguma referência a uma Thing
         if tool:FindFirstChild("Configuration") or 
            tool:FindFirstChild("Thing") or 
            tool:FindFirstChild("Rarity") or
@@ -4223,67 +4227,26 @@ local function isHoldingThing()
         end
     end
 
-    -- 2. Verifica se há algum modelo com Configuration (Things geralmente são Models)
+    -- 2. Verifica Models
     for _, child in ipairs(char:GetChildren()) do
         if child:IsA("Model") then
-            -- Verifica se é uma Thing por várias propriedades
             if child:FindFirstChild("Configuration") or 
                child:FindFirstChild("Thing") or 
                child:FindFirstChild("Rarity") or
                child:FindFirstChild("ThingData") or
                child.Name:lower():find("thing") or
+               child.Name:lower():find("noob") or
                child:FindFirstChild("ThingAttachment") then
                 return true
             end
-            
-            -- Verifica se o modelo tem um PrimaryPart com attachments
-            local primaryPart = child.PrimaryPart
-            if primaryPart then
-                for _, attach in ipairs(primaryPart:GetChildren()) do
-                    if attach:IsA("Attachment") and 
-                       (attach.Name:lower():find("thing") or 
-                        attach:FindFirstChild("ThingGui") or
-                        attach:FindFirstChild("Stolen")) then
-                        return true
-                    end
-                end
-            end
-        end
-        
-        -- 3. Verifica se há partes com referências a Thing
-        if child:IsA("BasePart") and child.Name ~= "HumanoidRootPart" then
-            if child:FindFirstChild("ThingAttachment") or
-               child:FindFirstChild("ThingGui") or
-               child:FindFirstChild("Configuration") then
-                return true
-            end
         end
     end
 
-    -- 4. Verifica através de ProximityPrompts (se estiver interagindo com uma)
-    for _, prompt in ipairs(char:GetDescendants()) do
-        if prompt:IsA("ProximityPrompt") then
-            local parent = prompt.Parent
-            while parent do
-                if parent:IsA("Model") and 
-                   (parent:FindFirstChild("Configuration") or 
-                    parent:FindFirstChild("Thing") or
-                    parent:FindFirstChild("Rarity") or
-                    parent.Name:lower():find("thing")) then
-                    return true
-                end
-                parent = parent.Parent
-            end
-        end
-    end
-
-    -- 5. Verifica no Workspace se o jogador está segurando algo (via Weld/Motor6D)
+    -- 3. Verifica Welds/Motor6D
     for _, weld in ipairs(char:GetDescendants()) do
         if weld:IsA("Weld") or weld:IsA("Motor6D") then
             local part0 = weld.Part0
             local part1 = weld.Part1
-            
-            -- Se uma parte está conectada ao personagem e parece ser uma Thing
             if part0 and part1 then
                 for _, part in ipairs({part0, part1}) do
                     if part.Parent and part.Parent ~= char and part.Parent:IsA("Model") then
@@ -4320,63 +4283,8 @@ local function getPlayerBase(player)
 end
 
 -- ==========================================
--- FUNÇÃO DE TELEPORTE CORRIGIDA
+-- SISTEMA DE NOTIFICAÇÕES
 -- ==========================================
-local function teleportToMyBase()
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then
-        showNotification("❌ Personagem não encontrado!", true)
-        return
-    end
-
-    -- Verifica se está segurando uma Thing usando a função melhorada
-    if not isHoldingThing() then
-        showNotification("❌ Você precisa estar segurando 1 Thing para se teleportar!", true)
-        return
-    end
-
-    local myBase = getPlayerBase(LocalPlayer)
-    
-    if myBase then
-        -- Tenta encontrar um ponto de teleporte na base
-        local dest = myBase:FindFirstChild("CollectZone", true) or 
-                     myBase:FindFirstChild("Spawn", true) or 
-                     myBase:FindFirstChild("SpawnLocation", true) or
-                     myBase:FindFirstChild("BaseSpawn", true) or
-                     myBase.PrimaryPart
-        
-        if dest then
-            -- Se for um modelo, tenta pegar o PrimaryPart
-            if dest:IsA("Model") then
-                dest = dest.PrimaryPart or dest:FindFirstChildWhichIsA("BasePart")
-            end
-            
-            if dest and dest:IsA("BasePart") then
-                hrp.CFrame = dest.CFrame + Vector3.new(0, 4, 0)
-                showNotification("✅ Teleportado para sua base!", false)
-                return
-            end
-        end
-        
-        -- Fallback: teleporta para o centro da base
-        local baseHRP = myBase:FindFirstChild("HumanoidRootPart") or myBase:FindFirstChildWhichIsA("BasePart")
-        if baseHRP then
-            hrp.CFrame = baseHRP.CFrame + Vector3.new(0, 4, 0)
-            showNotification("✅ Teleportado para sua base!", false)
-            return
-        end
-        
-        showNotification("❌ Ponto de teleporte não encontrado na sua base!", true)
-    else
-        showNotification("❌ Sua base não foi encontrada!", true)
-    end
-end
-
--- ==========================================
--- RESTANTE DO SCRIPT (UI, NOTIFICAÇÕES, ETC)
--- ==========================================
-
--- Sistema de notificações (mantido igual)
 local NotificationGui = Instance.new("ScreenGui")
 NotificationGui.Name = "StealNotificationGui"
 NotificationGui.ResetOnSpawn = false
@@ -4518,6 +4426,284 @@ local function createInputPopup(title, placeholder, callback)
 end
 
 -- ==========================================
+-- FUNÇÕES DAS FEATURES
+-- ==========================================
+
+-- 1. TELEPORTAR PARA BASE
+local function teleportToMyBase()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        showNotification("❌ Personagem não encontrado!", true)
+        return
+    end
+
+    if not isHoldingThing() then
+        showNotification("❌ Você precisa estar segurando 1 Thing!", true)
+        return
+    end
+
+    local myBase = getPlayerBase(LocalPlayer)
+    
+    if myBase then
+        local dest = myBase:FindFirstChild("CollectZone", true) or 
+                     myBase:FindFirstChild("Spawn", true) or 
+                     myBase:FindFirstChild("SpawnLocation", true) or
+                     myBase.PrimaryPart
+        
+        if dest then
+            if dest:IsA("Model") then
+                dest = dest.PrimaryPart or dest:FindFirstChildWhichIsA("BasePart")
+            end
+            
+            if dest and dest:IsA("BasePart") then
+                hrp.CFrame = dest.CFrame + Vector3.new(0, 4, 0)
+                showNotification("✅ Teleportado para sua base!", false)
+                return
+            end
+        end
+        
+        local baseHRP = myBase:FindFirstChild("HumanoidRootPart") or myBase:FindFirstChildWhichIsA("BasePart")
+        if baseHRP then
+            hrp.CFrame = baseHRP.CFrame + Vector3.new(0, 4, 0)
+            showNotification("✅ Teleportado para sua base!", false)
+            return
+        end
+        
+        showNotification("❌ Ponto de teleporte não encontrado!", true)
+    else
+        showNotification("❌ Sua base não foi encontrada!", true)
+    end
+end
+
+-- 2. ANTI-RAGDOLL
+local antiRagdollEnabled = false
+local antiRagdollConnection = nil
+
+local function applyAntiRagdoll()
+    if antiRagdollConnection then antiRagdollConnection:Disconnect() end
+    
+    antiRagdollConnection = RunService.Heartbeat:Connect(function()
+        if not antiRagdollEnabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            if hum.PlatformStand then hum.PlatformStand = false end
+        end
+        
+        for _, inst in ipairs(char:GetDescendants()) do
+            if inst.Name == "RagdollConstraint" or inst.Name == "ColliderPart" then
+                inst:Destroy()
+            elseif inst:IsA("Motor6D") and not inst.Enabled then
+                inst.Enabled = true
+            end
+        end
+    end)
+end
+
+-- 3. ESP THINGS
+local espThingsEnabled = false
+local espThingsFolder = Instance.new("Folder", Workspace)
+espThingsFolder.Name = "ThingsESP"
+
+local function clearESPNasBases()
+    espThingsFolder:ClearAllChildren()
+end
+
+local function updateThingsESP()
+    clearESPNasBases()
+    if not espThingsEnabled then return end
+    
+    local mapBases = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Bases") or Workspace:FindFirstChild("Bases")
+    if not mapBases then return end
+    
+    for _, base in ipairs(mapBases:GetChildren()) do
+        for _, desc in ipairs(base:GetDescendants()) do
+            if desc:IsA("Model") and (desc.Parent and desc.Parent.Name == "Slots" or desc:FindFirstChild("Configuration")) then
+                local cfg = desc:FindFirstChild("Configuration")
+                if cfg then
+                    local thingVal = cfg:FindFirstChild("Thing") and cfg.Thing.Value
+                    if thingVal and typeof(thingVal) == "Instance" then
+                        local targetPart = thingVal.PrimaryPart or desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
+                        if targetPart then
+                            local billboard = Instance.new("BillboardGui")
+                            billboard.Name = "ThingsESP"
+                            billboard.AlwaysOnTop = true
+                            billboard.Size = UDim2.new(0, 200, 0, 40)
+                            billboard.Adornee = targetPart
+                            billboard.Parent = espThingsFolder
+                            
+                            local textFrame = Instance.new("TextLabel")
+                            textFrame.Size = UDim2.new(1, 0, 1, 0)
+                            textFrame.BackgroundTransparency = 1
+                            textFrame.TextColor3 = Color3.fromRGB(255, 230, 100)
+                            textFrame.TextStrokeTransparency = 0
+                            textFrame.Font = Enum.Font.SourceSansBold
+                            textFrame.TextSize = 13
+                            
+                            local rarity = cfg:FindFirstChild("Rarity") and cfg.Rarity.Value or "Comum"
+                            local mutation = cfg:FindFirstChild("Mutation") and cfg.Mutation.Value or ""
+                            
+                            local details = "📦 " .. thingVal.Name .. " | ⭐ " .. tostring(rarity)
+                            if mutation ~= "" and mutation ~= "Nenhuma" then
+                                details = details .. " | 🧬 " .. tostring(mutation)
+                            end
+                            
+                            textFrame.Text = details
+                            textFrame.Parent = billboard
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- 4. ESP PLAYERS
+local espPlayersEnabled = false
+local espPlayersFolder = Instance.new("Folder", Workspace)
+espPlayersFolder.Name = "PlayersESP"
+
+local function clearESPPlayers()
+    espPlayersFolder:ClearAllChildren()
+end
+
+local function updatePlayersESP()
+    clearESPPlayers()
+    if not espPlayersEnabled then return end
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            local hum = player.Character:FindFirstChildOfClass("Humanoid")
+            
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "PlayerESP"
+            billboard.AlwaysOnTop = true
+            billboard.Size = UDim2.new(0, 150, 0, 40)
+            billboard.Adornee = hrp
+            billboard.Parent = espPlayersFolder
+            
+            local textFrame = Instance.new("TextLabel")
+            textFrame.Size = UDim2.new(1, 0, 1, 0)
+            textFrame.BackgroundTransparency = 1
+            textFrame.TextColor3 = Color3.fromRGB(0, 255, 255)
+            textFrame.TextStrokeTransparency = 0
+            textFrame.Font = Enum.Font.SourceSansBold
+            textFrame.TextSize = 14
+            textFrame.Text = string.format("👤 %s\n❤️ %s", player.Name, hum and math.floor(hum.Health) or "?")
+            textFrame.Parent = billboard
+            
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "ESPHighlight"
+            highlight.FillColor = Color3.fromRGB(0, 255, 255)
+            highlight.FillTransparency = 0.6
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.OutlineTransparency = 0.3
+            highlight.Parent = player.Character
+        end
+    end
+end
+
+-- 5. PULO INFINITO
+local infiniteJumpEnabled = false
+local infiniteJumpConnection = nil
+
+-- 6. SPEED BOOST
+local speedBoostEnabled = false
+
+-- 7. ANÚNCIO PERSONALIZADO
+local function sendCustomAnnouncement(text, color)
+    local Announcement = ReplicatedStorage:FindFirstChild("Remotes") and 
+                         ReplicatedStorage.Remotes:FindFirstChild("Events") and 
+                         ReplicatedStorage.Remotes.Events:FindFirstChild("Announcement")
+    
+    if Announcement then
+        pcall(function()
+            Announcement:FireServer(text or "👑 ADMIN ONLINE!", color or Color3.fromRGB(255,215,0))
+            return true
+        end)
+    end
+    return false
+end
+
+-- 8. DENUNCIAR ZEZEBRITO
+local function sendReportToZeze()
+    local SendReportEvent = ReplicatedStorage:FindFirstChild("Remotes") and 
+                           ReplicatedStorage.Remotes:FindFirstChild("Events") and 
+                           ReplicatedStorage.Remotes.Events:FindFirstChild("SendReportEvent")
+    
+    if SendReportEvent then
+        pcall(function()
+            SendReportEvent:FireServer("ZezeBrito", "Judas")
+            return true
+        end)
+    end
+    return false
+end
+
+-- 9. SPAM DENÚNCIA
+local function spamReportZeze(count)
+    local SendReportEvent = ReplicatedStorage:FindFirstChild("Remotes") and 
+                           ReplicatedStorage.Remotes:FindFirstChild("Events") and 
+                           ReplicatedStorage.Remotes.Events:FindFirstChild("SendReportEvent")
+    
+    if SendReportEvent then
+        for i = 1, (count or 10) do
+            pcall(function()
+                SendReportEvent:FireServer("ZezeBrito", "Judas")
+            end)
+            task.wait(0.05)
+        end
+        return true
+    end
+    return false
+end
+
+-- 10. LISTAR THINGS
+local function listAllThings()
+    local mapBases = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Bases") or Workspace:FindFirstChild("Bases")
+    if not mapBases then
+        showNotification("❌ Bases não encontradas!", true)
+        return
+    end
+    
+    local things = {}
+    for _, base in ipairs(mapBases:GetChildren()) do
+        for _, desc in ipairs(base:GetDescendants()) do
+            if desc:IsA("Model") and desc:FindFirstChild("Configuration") then
+                local cfg = desc.Configuration
+                local thingVal = cfg:FindFirstChild("Thing") and cfg.Thing.Value
+                if thingVal and typeof(thingVal) == "Instance" then
+                    local rarity = cfg:FindFirstChild("Rarity") and cfg.Rarity.Value or "Comum"
+                    local mutation = cfg:FindFirstChild("Mutation") and cfg.Mutation.Value or ""
+                    local owner = cfg:FindFirstChild("Player") and cfg.Player.Value or "Sem dono"
+                    
+                    local info = string.format("📦 %s | ⭐%s | 👤%s", thingVal.Name, rarity, owner.Name or "Sem dono")
+                    if mutation ~= "" and mutation ~= "Nenhuma" then
+                        info = info .. " | 🧬" .. mutation
+                    end
+                    table.insert(things, info)
+                end
+            end
+        end
+    end
+    
+    if #things > 0 then
+        print("=== THINGS ENCONTRADAS ===")
+        for _, thing in ipairs(things) do
+            print(thing)
+        end
+        showNotification(string.format("✅ %d Things encontradas! Veja no console (F9)", #things), false)
+    else
+        showNotification("❌ Nenhuma Thing encontrada!", true)
+    end
+end
+
+-- ==========================================
 -- INTERFACE PRINCIPAL
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
@@ -4527,8 +4713,8 @@ ScreenGui.Parent = parentTarget
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 380, 0, 350)
-MainFrame.Position = UDim2.new(0.5, -190, 0.2, 0)
+MainFrame.Size = UDim2.new(0, 380, 0, 520)
+MainFrame.Position = UDim2.new(0.5, -190, 0.1, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(28, 24, 15)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -4546,12 +4732,24 @@ local Title = Instance.new("TextLabel")
 Title.Name = "Title"
 Title.Size = UDim2.new(1, 0, 0, 42)
 Title.BackgroundColor3 = Color3.fromRGB(50, 40, 15)
-Title.Text = "👑 STEAL A NOOB [FIXED] 👑"
+Title.Text = "👑 STEAL A NOOB [COMPLETO] 👑"
 Title.TextColor3 = Color3.fromRGB(255, 220, 50)
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 14
 Title.Parent = MainFrame
 Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 10)
+
+-- Botão minimizar
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Size = UDim2.new(0, 30, 0, 30)
+MinimizeBtn.Position = UDim2.new(1, -35, 0, 6)
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 30)
+MinimizeBtn.Text = "−"
+MinimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeBtn.TextSize = 20
+MinimizeBtn.Font = Enum.Font.SourceSansBold
+MinimizeBtn.Parent = MainFrame
+Instance.new("UICorner", MinimizeBtn).CornerRadius = UDim.new(0, 5)
 
 local ScrollFrame = Instance.new("ScrollingFrame")
 ScrollFrame.Name = "ScrollFrame"
@@ -4560,7 +4758,7 @@ ScrollFrame.Position = UDim2.new(0, 6, 0, 45)
 ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 6
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 450)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 750)
 ScrollFrame.Parent = MainFrame
 
 local UIListLayout = Instance.new("UIListLayout")
@@ -4609,31 +4807,213 @@ end
 -- ==========================================
 
 local BtnTPMyBase = createButton("🏠 Teleportar para MINHA Base", Color3.fromRGB(150, 110, 20), "Precisa estar segurando uma Thing")
+local BtnAntiRagdoll = createButton("🛡️ Anti-Ragdoll (OFF)", Color3.fromRGB(55, 45, 25), "Previne ragdoll")
+local BtnESPThings = createButton("👁️ ESP Things (OFF)", Color3.fromRGB(55, 45, 25), "Mostra Things nas bases")
+local BtnESPPlayers = createButton("👤 ESP Players (OFF)", Color3.fromRGB(55, 45, 25), "Mostra outros players")
+local BtnInfiniteJump = createButton("🦘 Pulo Infinito (OFF)", Color3.fromRGB(55, 45, 25), "Ativa pulo infinito")
+local BtnSpeedBoost = createButton("💨 Speed Boost (OFF)", Color3.fromRGB(55, 45, 25), "Aumenta velocidade")
 local BtnCustomAnnounce = createButton("📢 Anúncio Personalizado", Color3.fromRGB(200, 50, 50), "Envia anúncio com texto customizado")
+local BtnReportZeze = createButton("📨 Denunciar ZezeBrito", Color3.fromRGB(200, 100, 50), "Envia denúncia: ZezeBrito = Judas")
+local BtnSpamZeze = createButton("🔥 Spam Denúncia Zeze", Color3.fromRGB(200, 50, 100), "Envia 10 denúncias do ZezeBrito")
+local BtnListThings = createButton("📋 Listar Things", Color3.fromRGB(50, 200, 100), "Mostra todas as Things no console")
 
 -- ==========================================
 -- CONEXÃO DOS BOTÕES
 -- ==========================================
 
--- Botão Teleport (usando a função corrigida)
+-- 1. Teleport
 BtnTPMyBase.MouseButton1Click:Connect(teleportToMyBase)
 
--- Botão Anúncio Personalizado
+-- 2. Anti-Ragdoll
+BtnAntiRagdoll.MouseButton1Click:Connect(function()
+    antiRagdollEnabled = not antiRagdollEnabled
+    if antiRagdollEnabled then
+        BtnAntiRagdoll.Text = "🛡️ Anti-Ragdoll (ON)"
+        BtnAntiRagdoll.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
+        applyAntiRagdoll()
+    else
+        BtnAntiRagdoll.Text = "🛡️ Anti-Ragdoll (OFF)"
+        BtnAntiRagdoll.BackgroundColor3 = Color3.fromRGB(55, 45, 25)
+        if antiRagdollConnection then
+            antiRagdollConnection:Disconnect()
+            antiRagdollConnection = nil
+        end
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    if antiRagdollEnabled then applyAntiRagdoll() end
+end)
+
+-- 3. ESP Things
+BtnESPThings.MouseButton1Click:Connect(function()
+    espThingsEnabled = not espThingsEnabled
+    if espThingsEnabled then
+        BtnESPThings.Text = "👁️ ESP Things (ON)"
+        BtnESPThings.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
+        task.spawn(function()
+            while espThingsEnabled do
+                updateThingsESP()
+                task.wait(3)
+            end
+        end)
+    else
+        BtnESPThings.Text = "👁️ ESP Things (OFF)"
+        BtnESPThings.BackgroundColor3 = Color3.fromRGB(55, 45, 25)
+        clearESPNasBases()
+    end
+end)
+
+-- 4. ESP Players
+BtnESPPlayers.MouseButton1Click:Connect(function()
+    espPlayersEnabled = not espPlayersEnabled
+    if espPlayersEnabled then
+        BtnESPPlayers.Text = "👤 ESP Players (ON)"
+        BtnESPPlayers.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
+        task.spawn(function()
+            while espPlayersEnabled do
+                updatePlayersESP()
+                task.wait(2)
+            end
+        end)
+    else
+        BtnESPPlayers.Text = "👤 ESP Players (OFF)"
+        BtnESPPlayers.BackgroundColor3 = Color3.fromRGB(55, 45, 25)
+        clearESPPlayers()
+        
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then
+                local highlight = player.Character:FindFirstChild("ESPHighlight")
+                if highlight then highlight:Destroy() end
+            end
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if player.Character then
+        local highlight = player.Character:FindFirstChild("ESPHighlight")
+        if highlight then highlight:Destroy() end
+    end
+end)
+
+Players.PlayerAdded:Connect(function(player)
+    if espPlayersEnabled then
+        task.wait(0.5)
+        updatePlayersESP()
+    end
+end)
+
+-- 5. Pulo Infinito
+BtnInfiniteJump.MouseButton1Click:Connect(function()
+    infiniteJumpEnabled = not infiniteJumpEnabled
+    
+    if infiniteJumpEnabled then
+        BtnInfiniteJump.Text = "🦘 Pulo Infinito (ON)"
+        BtnInfiniteJump.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
+        
+        infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+            if infiniteJumpEnabled then
+                local char = LocalPlayer.Character
+                if char then
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum and hum:GetState() ~= Enum.HumanoidStateType.Jumping then
+                        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                end
+            end
+        end)
+        showNotification("✅ Pulo infinito ativado!", false)
+    else
+        BtnInfiniteJump.Text = "🦘 Pulo Infinito (OFF)"
+        BtnInfiniteJump.BackgroundColor3 = Color3.fromRGB(55, 45, 25)
+        if infiniteJumpConnection then
+            infiniteJumpConnection:Disconnect()
+            infiniteJumpConnection = nil
+        end
+        showNotification("❌ Pulo infinito desativado!", false)
+    end
+end)
+
+-- 6. Speed Boost
+BtnSpeedBoost.MouseButton1Click:Connect(function()
+    speedBoostEnabled = not speedBoostEnabled
+    
+    local char = LocalPlayer.Character
+    if not char then
+        showNotification("❌ Personagem não encontrado!", true)
+        return
+    end
+    
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then
+        showNotification("❌ Humanoid não encontrado!", true)
+        return
+    end
+    
+    if speedBoostEnabled then
+        BtnSpeedBoost.Text = "💨 Speed Boost (ON)"
+        BtnSpeedBoost.BackgroundColor3 = Color3.fromRGB(40, 140, 60)
+        hum.WalkSpeed = 50
+        showNotification("✅ Speed Boost ativado (50)", false)
+    else
+        BtnSpeedBoost.Text = "💨 Speed Boost (OFF)"
+        BtnSpeedBoost.BackgroundColor3 = Color3.fromRGB(55, 45, 25)
+        hum.WalkSpeed = 16
+        showNotification("❌ Speed Boost desativado", false)
+    end
+end)
+
+-- 7. Anúncio Personalizado
 BtnCustomAnnounce.MouseButton1Click:Connect(function()
     createInputPopup("📢 Enviar Anúncio", "Digite o texto do anúncio...", function(text)
-        local Announcement = ReplicatedStorage:FindFirstChild("Remotes") and 
-                             ReplicatedStorage.Remotes:FindFirstChild("Events") and 
-                             ReplicatedStorage.Remotes.Events:FindFirstChild("Announcement")
-        
-        if Announcement then
-            pcall(function()
-                Announcement:FireServer("👑 " .. text, Color3.fromRGB(255,215,0))
-                showNotification("✅ Anúncio enviado: " .. text, false)
-            end)
+        local success = sendCustomAnnouncement("👑 " .. text, Color3.fromRGB(255,215,0))
+        if success then
+            showNotification("✅ Anúncio enviado: " .. text, false)
         else
             showNotification("❌ Remote de anúncio não encontrado!", true)
         end
     end)
+end)
+
+-- 8. Denunciar ZezeBrito
+BtnReportZeze.MouseButton1Click:Connect(function()
+    local success = sendReportToZeze()
+    if success then
+        showNotification("✅ Denúncia enviada: ZezeBrito = Judas!", false)
+    else
+        showNotification("❌ Remote de denúncia não encontrado!", true)
+    end
+end)
+
+-- 9. Spam Denúncia
+BtnSpamZeze.MouseButton1Click:Connect(function()
+    local success = spamReportZeze(10)
+    if success then
+        showNotification("✅ 10 denúncias do ZezeBrito enviadas!", false)
+    else
+        showNotification("❌ Remote de denúncia não encontrado!", true)
+    end
+end)
+
+-- 10. Listar Things
+BtnListThings.MouseButton1Click:Connect(listAllThings)
+
+-- ==========================================
+-- MINIMIZAR
+-- ==========================================
+local minimized = false
+MinimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        MainFrame.Size = UDim2.new(0, 380, 0, 50)
+        ScrollFrame.Visible = false
+        MinimizeBtn.Text = "+"
+    else
+        MainFrame.Size = UDim2.new(0, 380, 0, 520)
+        ScrollFrame.Visible = true
+        MinimizeBtn.Text = "−"
+    end
 end)
 
 -- ==========================================
@@ -4647,7 +5027,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ==========================================
--- SISTEMA DE DETECÇÃO DE THING (CONSOLE DEBUG)
+-- DEBUG
 -- ==========================================
 local function debugThingDetection()
     local char = LocalPlayer.Character
@@ -4659,47 +5039,27 @@ local function debugThingDetection()
     print("=== DEBUG: DETECÇÃO DE THING ===")
     print("Personagem:", char.Name)
     
-    -- Verifica Tools
     local tool = char:FindFirstChildOfClass("Tool")
     if tool then
         print("✅ Tool encontrada:", tool.Name)
-        for _, child in ipairs(tool:GetChildren()) do
-            print("  - Tool child:", child.Name, child.ClassName)
-        end
     else
         print("❌ Nenhuma Tool encontrada")
     end
     
-    -- Verifica Models
     for _, child in ipairs(char:GetChildren()) do
         if child:IsA("Model") then
             print("📦 Model encontrado:", child.Name)
-            for _, subChild in ipairs(child:GetChildren()) do
-                print("  - Child:", subChild.Name, subChild.ClassName)
-            end
         end
     end
     
-    -- Verifica Welds
-    for _, weld in ipairs(char:GetDescendants()) do
-        if weld:IsA("Weld") or weld:IsA("Motor6D") then
-            print("🔗 Weld/Motor6D encontrado:", weld.Name)
-            if weld.Part0 and weld.Part1 then
-                print("  - Part0:", weld.Part0.Name, "Parent:", weld.Part0.Parent and weld.Part0.Parent.Name or "nil")
-                print("  - Part1:", weld.Part1.Name, "Parent:", weld.Part1.Parent and weld.Part1.Parent.Name or "nil")
-            end
-        end
-    end
-    
-    print("Resultado final isHoldingThing():", isHoldingThing())
+    print("Resultado isHoldingThing():", isHoldingThing())
 end
 
--- Comando para debug no console
 _G.debugThing = debugThingDetection
 
-print("✅ Script carregado! Pressione F2 para abrir/fechar.")
+print("✅ Script COMPLETO carregado! Pressione F2 para abrir/fechar.")
 print("📋 Digite _G.debugThing() no console (F9) para debug da detecção de Thing.")
-showNotification("🚀 Script corrigido carregado! F2 para abrir/fechar.", false)
+showNotification("🚀 Script completo carregado! F2 para abrir/fechar.", false)
 
 
 -- ==========================================
